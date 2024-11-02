@@ -1,0 +1,12 @@
+npm init -y
+npm install axios
+npm install mssql
+npm install stream
+npm install crypto-browserify
+npm install express
+npm install dotenv
+npm install cors
+npm install  body-parser
+npm install stream-browserify
+or 
+npm install  mssql stream crypto-browserify express dotenv cors body-parser stream-browserify
