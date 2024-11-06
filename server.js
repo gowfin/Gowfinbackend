@@ -1717,34 +1717,61 @@ app.post('/getfieldprint', async (req, res) => {
   const code = req.body.code; // Get group code from request body
   const date = new Date(); // Get current date
   const formattedDate = date.toISOString().split('T')[0]; // Format date
-
-  const sqlQuery = `
-     SELECT 
+ const sqlQuery =`
+ SELECT 
     d.CustNo,
     d.AccountName,
-    MAX(l.loanID) AS loanID,            -- Use MAX to get a single LoanID
-    MAX(l.LoanProduct) AS LoanProduct,   -- Use MAX to get a single LoanProduct
-    MAX(l.DisbursedDate) AS DisbursedDate, -- Use MAX to get a single DisbursedDate
-    MAX(-l.OutstandingBal) AS OutstandingBal, -- Use MAX to get a single OutstandingBal
-    MAX(l.instalment) AS instalment,      -- Use MAX to get a single instalment
+    MAX(l.loanID) AS loanID,              -- Use MAX to get a single LoanID (null if no loan)
+    MAX(l.LoanProduct) AS LoanProduct,     -- Use MAX to get a single LoanProduct (null if no loan)
+    MAX(l.DisbursedDate) AS DisbursedDate, -- Use MAX to get a single DisbursedDate (null if no loan)
+    MAX(-l.OutstandingBal) AS OutstandingBal, -- Use MAX to get a single OutstandingBal (null if no loan)
+    MAX(l.instalment) AS instalment,       -- Use MAX to get a single instalment (null if no loan)
     d.AccountID,
-    MAX(d.RunningBal) AS RunningBal,      -- Use MAX to get a single RunningBal
-    UPPER(MAX(d.ProductID)) AS ProductID,         -- Use MAX to get a single ProductID
-    MAX(interestPercent) AS interestPercent
-    FROM 
-    loans l
-INNER JOIN 
-    deposit d ON l.custno = d.custno 
+    MAX(d.RunningBal) AS RunningBal,       -- Use MAX to get a single RunningBal
+    UPPER(MAX(d.ProductID)) AS ProductID,  -- Use MAX to get a single ProductID
+    MAX(l.interestPercent) AS interestPercent
+FROM 
+    deposit d
+LEFT JOIN 
+    loans l ON l.CustNo = d.CustNo AND l.Status = 'Active'
 WHERE 
     d.groupID = @groupID 
-    AND l.Status = 'Active' 
     AND d.Status <> 'Closed'
 GROUP BY 
     d.CustNo, d.AccountName, d.AccountID
 ORDER BY 
     d.CustNo;
 
-      `;
+ 
+ 
+ `;
+  // const sqlQuery = `
+//      SELECT 
+//     d.CustNo,
+//     d.AccountName,
+//     MAX(l.loanID) AS loanID,            -- Use MAX to get a single LoanID
+//     MAX(l.LoanProduct) AS LoanProduct,   -- Use MAX to get a single LoanProduct
+//     MAX(l.DisbursedDate) AS DisbursedDate, -- Use MAX to get a single DisbursedDate
+//     MAX(-l.OutstandingBal) AS OutstandingBal, -- Use MAX to get a single OutstandingBal
+//     MAX(l.instalment) AS instalment,      -- Use MAX to get a single instalment
+//     d.AccountID,
+//     MAX(d.RunningBal) AS RunningBal,      -- Use MAX to get a single RunningBal
+//     UPPER(MAX(d.ProductID)) AS ProductID,         -- Use MAX to get a single ProductID
+//     MAX(interestPercent) AS interestPercent
+//     FROM 
+//     loans l
+// INNER JOIN 
+//     deposit d ON l.custno = d.custno 
+// WHERE 
+//     d.groupID = @groupID 
+//     AND l.Status = 'Active' 
+//     AND d.Status <> 'Closed'
+// GROUP BY 
+//     d.CustNo, d.AccountName, d.AccountID
+// ORDER BY 
+//     d.CustNo;
+
+      // `;
 
   try {
     await checkPoolConnection(); // Ensure the connection is active
