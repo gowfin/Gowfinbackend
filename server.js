@@ -250,7 +250,7 @@ app.post('/login', async (req, res) => {
 });
 
 //Endpoint to fetch accounts
-app.post('/get_accounts', async (req, res) => {
+app.get('/get_accounts', async (req, res) => {
   try {
     // Connect to the SQL Server
     // await sql.connect(sqlConfig);
@@ -880,7 +880,7 @@ app.get('/workflow', async (req, res) => {
              WHERE TranID NOT IN ('011', '*001', '*002', '*005', '*011') 
              GROUP BY groupid, ValueDate`;
 
-  if (branchCode !== 'all') {
+  if (branchCode != 'all') {
       SQL = `SELECT groupid, SUM(amount) AS amount, LEFT(ValueDate, 11) AS ValueDate 
               FROM pendingGrptrx 
               WHERE LEFT(custno, 3) = @branchCode 
@@ -1740,7 +1740,7 @@ WHERE
 GROUP BY 
     d.CustNo, d.AccountName, d.AccountID
 ORDER BY 
-    d.CustNo;
+    d.CustNo
 
  
  
