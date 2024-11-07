@@ -250,7 +250,7 @@ app.post('/login', async (req, res) => {
 });
 
 //Endpoint to fetch accounts
-app.get('/get_accounts', async (req, res) => {
+app.post('/get_accounts', async (req, res) => {
   try {
     // Connect to the SQL Server
     // await sql.connect(sqlConfig);
