@@ -874,19 +874,20 @@ app.post('/get_history', async (req, res) => {
 });
 // Endpoint to fetch Group workflow data
 app.get('/workflow', async (req, res) => {
-  const branchCode = req.query.branchCode || 'all';
+  const branchCode = req.query.branchCode;
   let SQL = `SELECT groupid, SUM(amount) AS amount, CONVERT(VARCHAR(10), CAST(valuedate AS DATE), 120) AS ValueDate 
              FROM pendingGrptrx 
              WHERE TranID NOT IN ('011', '*001', '*002', '*005', '*011') 
              GROUP BY groupid, ValueDate`;
 
-  if (branchCode != 'all') {
+  if (branchCode !== 'all') {
       SQL = `SELECT groupid, SUM(amount) AS amount, LEFT(ValueDate, 11) AS ValueDate 
               FROM pendingGrptrx 
               WHERE LEFT(custno, 3) = @branchCode 
               AND TranID NOT IN ('011', '*001', '*002', '*005', '*011') 
               GROUP BY groupid, ValueDate`;
   }
+ 
 
   try {
       // Connect to the database
