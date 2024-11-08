@@ -1193,13 +1193,14 @@ app.post('/approvetransaction', async (req, res) => {
     if (!CustNo || typeof CustNo !== 'string' || CustNo.trim().length === 0) {
       throw new Error('Invalid CustNo');
     }
-
+console.log('Check CustNo:',CustNo);
     if (TranID === "001") {
       runningBal = await handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance,TranID,GroupID);
     } else if (TranID === "002") {
-      runningBal = await handleDepositTransaction(pool, TransactionNbr, AccountID, Amount, balance, TranID,GroupID);
+ 
+      runningBal = await handleDepositTransaction(pool, TransactionNbr, AccountID, Amount, balance, TranID,CustNo,GroupID);
     } else {
-      runningBal = await handleOtherTransactionTypes(pool, TranID, TransactionNbr, AccountID, Amount, balance, CustNo,GroupID);
+      runningBal = await handleOtherTransactionTypes(pool,TransactionNbr, AccountID, Amount, balance, CustNo,CustNo,GroupID);
     }
 
     res.send({ message: 'Transaction posted successfully', runningBal });
@@ -1227,13 +1228,15 @@ async function getAccountBalance(pool, AccountID,CustNo) {
 
 // Function to handle loan transactions
 async function handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance,TranID,GroupID) {
+  
   let pamount = PrinElement;
   let intamount = IntElement;
 
   const runningBal = (balance + parseFloat(pamount)).toFixed(2);
   const updateLoanBalQuery = `EXEC updateLoanBal @pamount, @AccountID, @CustNo`;
-  
-  const queryInsertRepayment =GroupID==='none' ? `
+  let singtrx=false;
+  if(!GroupID){singtrx=true}
+  const queryInsertRepayment =GroupID==='none'  || singtrx ? `
     INSERT INTO transactn (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr) 
     SELECT AccountID, tranid, Amount, DebitGL, CreditGL, @runningBal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr 
     FROM pendingtrx WHERE transactionNbr = @TransactionNbr
@@ -1247,7 +1250,7 @@ async function handleLoanTransaction(pool, IntElement, PrinElement, TransactionN
     WHERE custNo = @CustNo AND loanid = @AccountID AND count = 1
   `;
 
-  const queryDelPendTrx =GroupID==='none'? `
+  const queryDelPendTrx =GroupID==='none' || singtrx ? `
     DELETE FROM pendingtrx 
     WHERE transactionNbr = @TransactionNbr AND AccountID = @AccountID AND tranID = @TranID
   `:  `DELETE FROM pendinggrptrx 
@@ -1317,11 +1320,16 @@ app.get('/api/search/:accountNameTyped', async (req, res) => {
 
 // Function to handle deposit transactions
 async function handleDepositTransaction(pool, TransactionNbr, AccountID, Amount, balance,TranID,CustNo,GroupID) {
+  // console.log("Received Parameters:", { pool, TransactionNbr, AccountID, Amount, balance, TranID, CustNo, GroupID });
   
+  let singletrx=false;
+  if(!GroupID){
+    singletrx=true;
+  }
   const runningBal = (balance + parseFloat(Amount)).toFixed(2);
-  console.log("here:",Amount,runningBal);
+  // console.log("here:",Amount,runningBal);
   const updateDepositQuery = `UPDATE Deposit SET RunningBal = RunningBal + @Amount WHERE AccountID = @AccountID and CustNo=@CustNo`;
-  const queryInsertDeposit =GroupID==='none'? `
+  const queryInsertDeposit =GroupID==='none' || singletrx ? `
     INSERT INTO transactn (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr) 
     SELECT AccountID, tranid, Amount, DebitGL, CreditGL, @runningBal, ValueDate, DateEffective, CustNo, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr 
     FROM pendingtrx WHERE transactionNbr = @TransactionNbr
@@ -1330,8 +1338,8 @@ async function handleDepositTransaction(pool, TransactionNbr, AccountID, Amount,
     SELECT AccountID, tranid, Amount, DebitGL, CreditGL, @runningBal, ValueDate, DateEffective, CustNo, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr 
     FROM pendinggrptrx WHERE transactionNbr = @TransactionNbr
   `;
-  console.log("query:",queryInsertDeposit);
-  const queryDelPendTrx =GroupID==='none'? `
+  // console.log("query:",queryInsertDeposit);
+  const queryDelPendTrx =GroupID==='none' || singletrx ? `
     DELETE FROM pendingtrx 
     WHERE transactionNbr = @TransactionNbr AND AccountID = @AccountID AND tranID = @TranID
   `: `
@@ -1339,13 +1347,16 @@ async function handleDepositTransaction(pool, TransactionNbr, AccountID, Amount,
     WHERE transactionNbr = @TransactionNbr AND AccountID = @AccountID AND tranID = @TranID
   `;
 
+  // console.log("query:",queryDelPendTrx);
+
  
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
-    
+    console.log("Parameters:", { Amount, AccountID, CustNo });
+
     const request1 = new sql.Request(transaction);
-    request1.input('Amount', sql.Decimal(18, 2), Amount);
+    request1.input('Amount', sql.Decimal(18, 2), parseFloat(Amount));
     request1.input('AccountID', sql.VarChar(12), AccountID);
     request1.input('CustNo', sql.VarChar(12), CustNo);
     await request1.query(updateDepositQuery);
@@ -1372,11 +1383,12 @@ async function handleDepositTransaction(pool, TransactionNbr, AccountID, Amount,
 
 // Function to handle other transaction types
 async function handleOtherTransactionTypes(pool, TranID, TransactionNbr, AccountID, Amount,balance,CustNo,GroupID) {
+  
   // Handle withdrawal and other cases...
   // Similar to handleDepositTransaction, but amount is being subtracted from the bal unlike Deposit.
   const runningBal = (balance + parseFloat(-Amount)).toFixed(2);
   const updateWithdrQuery = `UPDATE Deposit SET RunningBal = RunningBal - @Amount WHERE AccountID = @AccountID and CustNo=@CustNo`;
-  const queryInsertWithdr =GroupID==='nome'? `
+  const queryInsertWithdr =GroupID==='none'? `
     INSERT INTO transactn (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr) 
     SELECT AccountID, tranid, Amount, DebitGL, CreditGL, @RunningBal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr 
     FROM pendingtrx WHERE transactionNbr = @TransactionNbr
@@ -1585,13 +1597,19 @@ app.post('/postbulkdeposits', async (req, res) => {
       await transaction.begin();
 
       for (const deposit of deposits) {
-          const transactionNbr = generateTransactionNumber(groupid);
+          const transactionNbr = generateTransactionNumber(groupid).replace('non','CDP');
           const { code,AccountID, CustNo, RunningBal, name, accountValue } = deposit;
+          console.log(deposit);
+          const {description}= deposit || ''
           const grouptrxNbr = `${groupid}${AccountID}-deposit-${formattedDate}`;
-          const narration = `Cash dep by ${name}`;
+          const narration =description===''? `Cash dep by ${name}`:description;
           const glcode=code.slice(0,6)+CustNo.slice(0,3);
           const pettycashgl='11102-'+CustNo.slice(0,3);
-          const sqlQuery = `
+          const sqlQuery =groupid ==='none' ?`
+              INSERT INTO pendingtrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr)
+              VALUES (@AccountID, '002', @accountValue, '11102-002', @glcode, @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Cash Deposit', @userid, @transactionNbr)
+          `:
+           `
               INSERT INTO pendinggrptrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr, groupid,Grouptrxno)
               VALUES (@AccountID, '002', @accountValue, '11102-002', @glcode, @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Cash Deposit', @userid, @transactionNbr,@groupid,@grouptrxNbr)
           `;
