@@ -2,7 +2,7 @@ const express = require('express');
 const sql = require('mssql');
 const router = express.Router();
 
-router.post('/transactions', async (req, res) => {
+router.post('/transactions/withdr', async (req, res) => {
   const {
     accountID,
     amount,
@@ -12,8 +12,8 @@ router.post('/transactions', async (req, res) => {
   } = req.body;
 
   const isWithdrawal = transactionType === 'Withdraw';
-  const amnt = isWithdrawal ? -amount : amount;
-  const tranid = isWithdrawal ? '005' : '001'; // Example tranid based on type
+  const amnt =  -amount ;
+  const tranid =  '005' ;
 
   const queryUpdateDeposit = `
     UPDATE Deposit 

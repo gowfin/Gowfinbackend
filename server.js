@@ -253,7 +253,7 @@ app.post('/login', async (req, res) => {
 app.post('/get_accounts', async (req, res) => {
   try {
     // Connect to the SQL Server
-    // await sql.connect(sqlConfig);
+ 
     await checkPoolConnection(); // Ensure the connection is active
     const sql = await poolPromise;
     console.log('Connected to the database'); 
@@ -1168,6 +1168,48 @@ app.post('/insert_balancediff', async (req, res) => {
 
 
 // POST endpoint for approving transactions
+// app.post('/approvetransaction', async (req, res) => {
+//   const {
+//     AccountID,
+//     TranID,
+//     Amount,
+//     TransactionNbr,
+//     CustNo,
+//     BranchID,
+//     GroupID,
+//     IntElement,
+//     PrinElement
+//   } = req.body;
+
+//   let runningBal = 0;
+
+//   try {
+//     await checkPoolConnection(); // Ensure the connection is active
+//     const pool = await poolPromise;
+    
+//     const balance = await getAccountBalance(pool, AccountID,CustNo);
+    
+//     // Validate CustNo to avoid SQL errors
+//     if (!CustNo || typeof CustNo !== 'string' || CustNo.trim().length === 0) {
+//       throw new Error('Invalid CustNo');
+//     }
+// console.log('Check CustNo:',CustNo);
+//     if (TranID === "001") {
+//       runningBal = await handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance,TranID,GroupID);
+//     } else if (TranID === "002") {
+ 
+//       runningBal = await handleDepositTransaction(pool, TransactionNbr, AccountID, Amount, balance, TranID,CustNo,GroupID);
+//     } else {
+//       runningBal = await handleOtherTransactionTypes(pool,TransactionNbr, AccountID, Amount, balance,TranID,CustNo,GroupID);
+//     }
+
+//     res.send({ message: 'Transaction posted successfully', runningBal });
+    
+//   } catch (err) {
+//     console.error('SQL error', err);
+//     res.status(500).send({ error: err.message.replace('mssql-70716-0.cloudclusters.net:19061', 'server') });
+//   }
+// });
 app.post('/approvetransaction', async (req, res) => {
   const {
     AccountID,
@@ -1186,25 +1228,27 @@ app.post('/approvetransaction', async (req, res) => {
   try {
     await checkPoolConnection(); // Ensure the connection is active
     const pool = await poolPromise;
-    
-    const balance = await getAccountBalance(pool, AccountID,CustNo);
+
+    const balance = await getAccountBalance(pool, AccountID, CustNo);
     
     // Validate CustNo to avoid SQL errors
     if (!CustNo || typeof CustNo !== 'string' || CustNo.trim().length === 0) {
       throw new Error('Invalid CustNo');
     }
-console.log('Check CustNo:',CustNo);
+    console.log('Check CustNo:', CustNo);
+
     if (TranID === "001") {
-      runningBal = await handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance,TranID,GroupID);
+      // Loan transaction
+      runningBal = await handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance, TranID, GroupID);
     } else if (TranID === "002") {
- 
-      runningBal = await handleDepositTransaction(pool, TransactionNbr, AccountID, Amount, balance, TranID,CustNo,GroupID);
+      // Deposit transaction
+      runningBal = await handleDepositTransaction(pool, TransactionNbr, AccountID, Amount, balance, TranID, CustNo, GroupID);
     } else {
-      runningBal = await handleOtherTransactionTypes(pool,TransactionNbr, AccountID, Amount, balance, CustNo,CustNo,GroupID);
+      // Withdrawal or other transaction types
+      runningBal = await handleOtherTransactionTypes(pool, TransactionNbr, AccountID, Amount, balance, TranID, CustNo, GroupID);
     }
 
     res.send({ message: 'Transaction posted successfully', runningBal });
-    
   } catch (err) {
     console.error('SQL error', err);
     res.status(500).send({ error: err.message.replace('mssql-70716-0.cloudclusters.net:19061', 'server') });
@@ -1353,7 +1397,7 @@ async function handleDepositTransaction(pool, TransactionNbr, AccountID, Amount,
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
-    console.log("Parameters:", { Amount, AccountID, CustNo });
+    // console.log("Parameters:", { Amount, AccountID, CustNo });
 
     const request1 = new sql.Request(transaction);
     request1.input('Amount', sql.Decimal(18, 2), parseFloat(Amount));
@@ -1382,61 +1426,121 @@ async function handleDepositTransaction(pool, TransactionNbr, AccountID, Amount,
 }
 
 // Function to handle other transaction types
-async function handleOtherTransactionTypes(pool, TranID, TransactionNbr, AccountID, Amount,balance,CustNo,GroupID) {
-  
-  // Handle withdrawal and other cases...
-  // Similar to handleDepositTransaction, but amount is being subtracted from the bal unlike Deposit.
-  const runningBal = (balance + parseFloat(-Amount)).toFixed(2);
-  const updateWithdrQuery = `UPDATE Deposit SET RunningBal = RunningBal - @Amount WHERE AccountID = @AccountID and CustNo=@CustNo`;
-  const queryInsertWithdr =GroupID==='none'? `
+async function handleOtherTransactionTypes(pool, TransactionNbr, AccountID, Amount, balance, TranID, CustNo, GroupID) {
+  const runningBal = balance - Amount;
+  console.log('Calculated Running Balance:', runningBal);
+
+  const updateWithdrQuery = `
+    UPDATE Deposit 
+    SET RunningBal = RunningBal - @Amount 
+    WHERE AccountID = @AccountID AND CustNo = @CustNo
+  `;
+
+  const queryInsertWithdr = GroupID === 'none' || ! GroupID? `
     INSERT INTO transactn (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr) 
-    SELECT AccountID, tranid, Amount, DebitGL, CreditGL, @RunningBal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr 
+    SELECT AccountID, tranid, Amount, DebitGL, CreditGL, @runningBal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr 
     FROM pendingtrx WHERE transactionNbr = @TransactionNbr
-  `:`
-    INSERT INTO transactn (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr) 
-    SELECT AccountID, tranid, Amount, DebitGL, CreditGL, @RunningBal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr 
+  ` : `
+    INSERT INTO transactn (AccountID, tranid, Amount, DebitGL, CreditGL,RunningBal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr) 
+    SELECT AccountID, tranid, Amount, DebitGL, CreditGL, @runningBal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr 
     FROM pendinggrptrx WHERE transactionNbr = @TransactionNbr
   `;
-  const queryDelPendTrx =GroupID==='none'? `
+
+  const queryDelPendTrx = GroupID === 'none' || ! GroupID ? `
     DELETE FROM pendingtrx 
     WHERE transactionNbr = @TransactionNbr AND AccountID = @AccountID AND tranID = @TranID
-  `: `
+  ` : `
     DELETE FROM pendinggrptrx 
     WHERE transactionNbr = @TransactionNbr AND AccountID = @AccountID AND tranID = @TranID
   `;
 
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
+
   try {
     const request1 = new sql.Request(transaction);
     request1.input('Amount', sql.Decimal(18, 2), Amount);
     request1.input('AccountID', sql.VarChar(12), AccountID);
     request1.input('CustNo', sql.VarChar(12), CustNo);
     await request1.query(updateWithdrQuery);
+    console.log('Withdrawal Balance Updated');
 
     const request2 = new sql.Request(transaction);
     request2.input('RunningBal', sql.Decimal(18, 2), runningBal);
     request2.input('TransactionNbr', sql.VarChar(50), TransactionNbr);
     await request2.query(queryInsertWithdr);
+    console.log('Transaction Record Inserted');
 
     const request3 = new sql.Request(transaction);
     request3.input('TransactionNbr', sql.VarChar(50), TransactionNbr);
     request3.input('AccountID', sql.VarChar(12), AccountID);
     request3.input('TranID', sql.VarChar(6), TranID);
     await request3.query(queryDelPendTrx);
+    console.log('Pending Transaction Deleted');
 
     await transaction.commit();
-    return runningBal;
+    console.log('Transaction Committed');
+    // return runningBal;
 
   } catch (err) {
+    console.error('Error in Transaction:', err.message);
     await transaction.rollback();
+
     throw new Error('Error during transaction: ' + err.message.replace('mssql-70716-0.cloudclusters.net:19061', 'server'));
   }
 }
 
 
+/////////////////////////////SINGLE LOAN POSTING/////////////////////////////////////////
+
+// Get loan schedule data
+app.get("/loan-schedule", async (req, res) => {
+    const { loanID, custno } = req.query;
+
+    try {
+        // Retrieve the pool connection
+        await checkPoolConnection(); // Ensure the connection is active
+        const pool = await poolPromise;
+
+        // First query: subSQL
+        const subSQL = `SELECT ROUND((servicedprin + servicedint + 1) / RepayWithint, 0, 1) + 1 AS count 
+                        FROM loanschedule 
+                        WHERE count = 1 
+                          AND loanID = @loanID 
+                          AND custno = @custno`;
+        const subSQLResult = await pool.request()
+            .input("loanID", sql.VarChar, loanID)
+            .input("custno", sql.VarChar, custno)
+            .query(subSQL);
+
+        const count = subSQLResult.recordset[0]?.count;
+
+        // Second query: SQL
+        const SQL = `SELECT * 
+                     FROM loanschedule 
+                     WHERE count = @count 
+                       AND loanID = @loanID 
+                       AND custno = @custno`;
+        const result = await pool.request()
+            .input("count", sql.Int, count)
+            .input("loanID", sql.VarChar, loanID)
+            .input("custno", sql.VarChar, custno)
+            .query(SQL);
+
+        if (result.recordset.length > 0) {
+            res.json(result.recordset[0]);
+        } else {
+            // Handle case where no result is found
+            res.status(404).json({ message: "No records found." });
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 ///////////////////////////////////////////////////////////////////////////////////////////
+
 // Endpoint to get Bulk posting loan data
 app.post('/getbulkloans', async (req, res) => {
   const code = req.body.code; // Get group code from request body
@@ -1577,12 +1681,12 @@ app.post('/postbulkdepositsrepayments', async (req, res) => {
   }
 });
 
-///////////////Posting bulk deposits
+///////////////Posting bulk deposits [used by bulk.js for bulk deposit only and single deposit/withdrawal by transactionmodal]
 app.post('/postbulkdeposits', async (req, res) => {
   const deposits = req.body.depositToPost; // Get deposits array from request body
   const groupid = req.body.code; // Get groupid  from request body
   const userid = req.body.userid; // Get userid  from request body
-
+  const singletrx= !groupid || groupid==='none'? true:false;
   const date = new Date(); // Get current date
   const formattedDate = date.toISOString().split('T')[0]; // Format date
 
@@ -1597,28 +1701,32 @@ app.post('/postbulkdeposits', async (req, res) => {
       await transaction.begin();
 
       for (const deposit of deposits) {
-          const transactionNbr = generateTransactionNumber(groupid).replace('non','CDP');
-          const { code,AccountID, CustNo, RunningBal, name, accountValue } = deposit;
-          console.log(deposit);
+        const { code,AccountID, CustNo, RunningBal, name, accountValue } = deposit;
+        const isWithdr=accountValue<0 ? true:false;
+          const transactionNbr =isWithdr?generateTransactionNumber(groupid).replace('non','WDR'): generateTransactionNumber(groupid).replace('non','CDP');
+          
+          // console.log(deposit);
+         
+          const tranid=isWithdr? '005' : '002';
           const {description}= deposit || ''
-          const grouptrxNbr = `${groupid}${AccountID}-deposit-${formattedDate}`;
-          const narration =description===''? `Cash dep by ${name}`:description;
-          const glcode=code.slice(0,6)+CustNo.slice(0,3);
-          const pettycashgl='11102-'+CustNo.slice(0,3);
-          const sqlQuery =groupid ==='none' ?`
+          const grouptrxNbr = isWithdr?`${groupid}${AccountID}-withdr-${formattedDate}`:`${groupid}${AccountID}-deposit-${formattedDate}`;
+          const narration =description==='' && !isWithdr? `Cash dep by ${name}`:description;
+          const glcode=isWithdr?'11102-'+CustNo.slice(0,3): code.slice(0,6)+CustNo.slice(0,3);
+          const pettycashgl=isWithdr? code.slice(0,6)+CustNo.slice(0,3):'11102-'+CustNo.slice(0,3);
+          const sqlQuery =singletrx ?`
               INSERT INTO pendingtrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr)
-              VALUES (@AccountID, '002', @accountValue, '11102-002', @glcode, @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Cash Deposit', @userid, @transactionNbr)
+              VALUES (@AccountID, @tranid, @accountValue, @pettycashgl, @glcode, @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Cash Withdrawal', @userid, @transactionNbr)
           `:
            `
               INSERT INTO pendinggrptrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr, groupid,Grouptrxno)
-              VALUES (@AccountID, '002', @accountValue, '11102-002', @glcode, @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Cash Deposit', @userid, @transactionNbr,@groupid,@grouptrxNbr)
+              VALUES (@AccountID, @tranid, @accountValue, @pettycashgl, @glcode, @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Bulk Withdrawal', @userid, @transactionNbr,@groupid,@grouptrxNbr)
           `;
      
           // Prepare and execute the SQL command
           const request = new sql.Request(transaction);
           request.input('AccountID', sql.VarChar(12), AccountID)
               .input('CustNo', sql.VarChar(12), CustNo)
-              .input('accountValue', sql.Decimal(18, 2), parseFloat(accountValue.replace(/,/g, ''))) // Remove commas and convert to float
+              .input('accountValue', sql.Decimal(18, 2), accountValue<0?Math.abs(accountValue):parseFloat(accountValue.replace(/,/g, ''))) // Remove commas and convert to float
               .input('RunningBal', sql.Decimal(18, 2), RunningBal)
               .input('name', sql.VarChar, name)
               .input('formattedDate', sql.Date, formattedDate)
@@ -1627,26 +1735,27 @@ app.post('/postbulkdeposits', async (req, res) => {
               .input('grouptrxNbr', sql.VarChar, grouptrxNbr)  
               .input('glcode', sql.VarChar, glcode)  
               .input('pettycashgl', sql.VarChar, pettycashgl) 
+              .input('tranid', sql.VarChar, tranid) 
               .input('groupid', sql.VarChar, groupid) 
               .input('userid', sql.VarChar, userid); // You may want to use a variable here
 
           await request.query(sqlQuery);
       }
-
+      const msg=singletrx? 'Transaction posted successfully':'Bulk deposits posted successfully,...Posting Loans';
       await transaction.commit(); // Commit the transaction
-      res.status(200).json({ message: 'Bulk deposits posted successfully,...Posting Loans' });
+      res.status(200).json({ message: msg });
   } catch (err) {
       await transaction.rollback(); // Rollback the transaction on error
       console.error(err);
       res.status(500).json({ status: 'failed', error: err.message.replace('mssql-70716-0.cloudclusters.net:19061', 'server') });
   }
 });
-////////Posting bulk repayments
-app.post('/postbulkrepayments', async (req, res) => {
+////////Posting  repayments used by only transactionmodal for single repayment
+app.post('/postrepayments', async (req, res) => {
   const repayments = req.body.repayToPost; // Get repayments array from request body
   const groupid = req.body.code; // Get groupid  from request body
   const userid = req.body.userid; // Get userid  from request body
-
+const singletrx=!groupid || groupid==='none' ? true: false;
   const date = new Date(); // Get current date
   const formattedDate = date.toISOString().split('T')[0]; // Format date
  
@@ -1661,37 +1770,52 @@ app.post('/postbulkrepayments', async (req, res) => {
       await transaction.begin();
      
       for (const repayment of repayments) {
-        const transactionNbr = generateTransactionNumber(groupid);
-          const { code,AccountID, CustNo, RunningBal, name, accountValue } = repayments;
-          const grouptrxNbr = `${groupid}${AccountID}-repay${formattedDate}`;
-          const narration = `Cash dep by ${name}`;
-          const glcode=code.slice(0,6)+CustNo.slice(0,3);
-          const pettycashgl='11102-'+CustNo.slice(0,3);
-          const sqlQuery = `
-              INSERT INTO pendinggrptrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr,groupid, Grouptrxno)
-              VALUES (@AccountID, '002', @accountValue,@glcode, @pettycashgl,  @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Bulk Repayment', @userid, @transactionNbr,@groupid,@grouptrxNbr)
-          `;
-     
-          // Prepare and execute the SQL command
-          const request = new sql.Request(transaction);
-          request.input('AccountID', sql.VarChar(12), AccountID)
-              .input('CustNo', sql.VarChar(12), CustNo)
-              .input('accountValue', sql.Decimal(18, 2), parseFloat(accountValue.replace(/,/g, ''))) // Remove commas and convert to float
-              .input('RunningBal', sql.Decimal(18, 2), RunningBal)
-              .input('name', sql.VarChar, name)
-              .input('formattedDate', sql.Date, formattedDate)
-              .input('transactionNbr', sql.VarChar, transactionNbr)
-              .input('narration', sql.VarChar, narration)
-              .input('grouptrxNbr', sql.VarChar, grouptrxNbr)  
-              .input('glcode', sql.VarChar, glcode) 
-              .input('pettycashgl', sql.VarChar, pettycashgl) 
-              .input('groupid', sql.VarChar, groupid)  
-              .input('userid', sql.VarChar, userid); // You may want to use a variable here
+        const transactionNbr = generateTransactionNumber(groupid).replace('non','RPT');
+        const { code,loanID, custno, outstandingbal, name,interestPercent,
+        accountValue } = repayment; 
+        const grouptrxNbr = `${groupid}${loanID}-repay-${formattedDate}`;
+        const groupinttrxNbr = `${groupid}${loanID}-int-${formattedDate}`;
+        const narration = `Bulk repay by ${name}`;
+        const glcode=code.slice(0,6)+custno.slice(0,3);
+        const pettycashgl='11102-'+custno.slice(0,3);
+        const accountAmount= parseFloat(accountValue.replace(/,/g, ''));
+        const intamount=(accountAmount-(accountAmount/interestPercent)).toFixed(2);
+        
+        const pamount=accountAmount/interestPercent;
+        const RunningBal=outstandingbal+ pamount; //needs to be changed to const RunningBal=(outstandingbal-accountAmount) for P+I
+        const sqlQuery = `
+            INSERT INTO pendingtrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr,intElement,PrinElement)
+            VALUES (@loanID, '001', @accountValue,@glcode, @pettycashgl,  @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Loan Repayment', @userid, @transactionNbr,@intamount,@pamount)
+        `;
+        const sqlQuery2 = `
+            INSERT INTO pendingtrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr,intElement,PrinElement)
+            VALUES (@loanID, '011', @intamount,@glcode, @pettycashgl,  @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Int on Repay', @userid, @transactionNbr,@intamount,@pamount)
+        `;
+   
+        // Prepare and execute the SQL command
+        const request = new sql.Request(transaction);
+        request.input('loanID', sql.VarChar(12), loanID)
+            .input('custno', sql.VarChar(12), custno)
+            .input('accountValue', sql.Decimal(18, 2), parseFloat(accountValue.replace(/,/g, ''))) // Remove commas and convert to float
+            .input('RunningBal', sql.Decimal(18, 2), RunningBal)
+            .input('name', sql.VarChar, name)
+            .input('formattedDate', sql.Date, formattedDate)
+            .input('transactionNbr', sql.VarChar, transactionNbr)
+            .input('narration', sql.VarChar, narration)
+            .input('grouptrxNbr', sql.VarChar, grouptrxNbr)  
+            .input('groupinttrxNbr', sql.VarChar, groupinttrxNbr)
+            .input('glcode', sql.VarChar, glcode) 
+            .input('pettycashgl', sql.VarChar, pettycashgl) 
+            .input('intamount',  sql.Decimal(18, 2), intamount) 
+            .input('pamount', sql.Decimal(18, 2), pamount) 
+            .input('groupid', sql.VarChar, groupid)  
+            .input('userid', sql.VarChar, userid); // You may want to use a variable here
 
-          await request.query(sqlQuery);
-      }
-
+        await request.query(sqlQuery);
+        await request.query(sqlQuery2);
+    }
       await transaction.commit(); // Commit the transaction
+
       res.status(200).json({ message: 'Bulk Loans posted successfully,...Posting completed' });
   } catch (err) {
       await transaction.rollback(); // Rollback the transaction on error
