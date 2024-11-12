@@ -1935,6 +1935,261 @@ ORDER BY
 
   }
 });
+///////////////////////////////SUBMIT DISBURSEMENT///////////////
+app.post('/calculate-schedule', async (req, res) => {
+  const Decimal = require('decimal.js');
+  const moment = require('moment');
+  let repayGap=1;
+  const { productID,
+    amount, 
+    clientID,
+    productSettings,
+    instalCount,
+    monthCount,
+    adjInstalCount,
+    selectedInterestType,
+    includeSaturday
+   } = req.body;
+  
+  
+  try {
+    // Connect to SQL Server
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+ // console.log('Params:',productID, amount, clientID);
+    // Get product details
+    const amountNumber = amount;
+
+    const result = await sql.query`SELECT * FROM Product WHERE ProductID = ${productID}`;
+    
+    const product = result.recordset[0];
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    //  console.log(product);
+    // Calculate loan schedule
+    let term = product.Term;
+    const moratorium = product.Moratorium;
+    const interestRate = product.InterestRate;
+    const frequency = product.PaymentFrequency;
+    let instalCount=term-moratorium;
+    let noOfMonths='';
+    let disbinstalCount=''
+    if (productSettings === "Adjust Default Product settings") {
+      noOfMonths = monthCount;
+      disbinstalCount = adjInstalCount;
+      term = instalCount + moratorium;
+  } else {
+      noOfMonths = product.MonthDuration;
+      disbinstalCount = term - moratorium;
+  }
+  
+  if (productSettings === "Adjust Default Product settings") {
+    instalCount = adjInstalCount;
+} else if (adjInstalCount !== "all" && productID.includes("IND")) {
+    repayGap = Math.floor(disbinstalCount / parseInt(adjInstalCount));
+    disbinstalCount = parseInt(adjInstalCount);
+} else if (adjInstalCount === "BI-Weekly" && productID.includes("REGLN")) {
+    repayGap = 0;
+    instalCount = 12;
+    Biweekly = true;
+} else {
+    Biweekly = false;
+}
+let totalInt = new Decimal(0);
+let fixedAmount = new Decimal(amountNumber);
+let fixedPrin = fixedAmount.dividedBy(instalCount);
+let intRateMonthly = new Decimal(interestRate).dividedBy(12);
+
+if (selectedInterestType.toUpperCase() === "EMI/EWI") {
+    totalInt = calculateEMIInterest(disbinstalCount, fixedAmount, fixedPrin, intRateMonthly);
+} else {
+    totalInt = new Decimal(amountNumber).times(interestRate).times(noOfMonths / 12).dividedBy(100);
+}
+
+// totalInt = totalInt.toFixed(2);
+console.log("Total calculated interest on loan is:", totalInt);
+
+const AmountWithInt = new Decimal(amountNumber).plus(totalInt);
+const repayment = AmountWithInt.dividedBy(disbinstalCount);
+const intRepay = totalInt.dividedBy(disbinstalCount);
+// const intRepay = 1000;
+
+
+let now = moment();
+ const schedule=generateRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frequency, now, moratorium, clientID, Biweekly, repayGap,includeSaturday);
+ res.json({ schedule });
+   } catch (error) {
+     console.error(error);
+     res.status(500).json({ error: 'Server error' });
+   }
+   function calculateEMIInterest(disbinstalCount, fixedAmount, fixedPrin, intRateMonthly) {
+    let totalInt = new Decimal(0);
+    for (let x = 1; x <= disbinstalCount; x++) {
+        totalInt = totalInt.plus(fixedAmount.times(intRateMonthly).dividedBy(100));
+        fixedAmount = fixedAmount.minus(fixedPrin);
+    }
+    return totalInt;
+}
+
+function generateRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frqncy, now, moratorium, clientID, Biweekly, repayGap,includeSaturday) {
+    let count = 1;
+    let schedule = [];
+    const holidays=['01-05',
+      '12-06',
+      '01-10',
+      '24-12',
+      '25-12',
+      '31-12',
+      '01-01']
+
+// while (AmountWithInt.greaterThan(0) && count <= disbinstalCount) {
+//     let date = now.format('YYYY-MM-DD');
+//     let balance = AmountWithInt.toFixed(2);
+//     let repayWithInt = repayment.toFixed(2);
+//     let principalRepay = repayment.minus(intRepay).toFixed(2);
+//     let interest = intRepay.toFixed(2);
+
+//     // Add an installment object to the schedule array
+//     schedule.push({
+//         installment: count,
+//         date: date,
+//         balance: balance,
+//         repayWithInt: repayWithInt,
+//         principalRepay: principalRepay,
+//         interest: interest,
+//         status: "Not Serviced",
+//         clientID: clientID
+//     });
+
+//     // Update date based on frequency
+//     if (frqncy === "Daily") {
+//         now.add(1, 'days');
+//     } else if (frqncy === "Weekly" && !Biweekly) {
+//         now.add(7, 'days');
+//     } else if (frqncy === "Monthly") {
+//         now.add(repayGap, 'months');
+//     } else if (frqncy === "Weekly" && Biweekly) {
+//         now.add(14, 'days');
+//     }
+
+//     AmountWithInt = AmountWithInt.minus(repayment);
+//     count++;
+// }
+// Check for moratorium period
+if (moratorium > 0 || frqncy === "Monthly") {
+  if (frqncy === "Daily") {
+      now.add(moratorium, 'days');
+  } else if (frqncy === "Weekly" && !Biweekly) {
+      now.add(moratorium, 'weeks');
+  } else if (frqncy === "Monthly") {
+      now.add(moratorium+1, 'months'); //zero moratorium means after 30days(1month) and 1 means 60days(2months)
+  } else if (frqncy === "Weekly" && Biweekly) {
+      now.add(moratorium * 2, 'weeks'); // Adjust for bi-weekly
+  }
+}
+while (AmountWithInt.greaterThan(0) && count <= disbinstalCount) {
+    let validDateFound = false;
+
+    // Loop to find the next valid date, skipping holidays and weekends if necessary
+    while (!validDateFound) {
+        let date = now.format('YYYY-MM-DD');
+        let dayOfWeek = now.day(); // 0 = Sunday, 6 = Saturday
+        let formattedHoliday = now.format('DD-MM');
+
+        // Check if the date is not a holiday and meets the weekend rules
+        if (
+            !holidays.includes(formattedHoliday) &&                      // Not a holiday
+            (includeSaturday || (dayOfWeek !== 0 && dayOfWeek !== 6)) && // Include/exclude Saturdays
+            (dayOfWeek !== 0)                                            // Exclude Sundays always
+        ) {
+            validDateFound = true; // Valid date found, we can add it to the schedule
+        } else {
+            now.add(1, 'days'); // Move to the next day if the date is invalid
+        }
+    }
+
+    // Update balance and repayment amounts
+    let balance = AmountWithInt.toFixed(2);
+    let repayWithInt = repayment.toFixed(2);
+    let principalRepay = repayment.minus(intRepay).toFixed(2);
+    let interest = intRepay.toFixed(2);
+
+    // Add an installment object to the schedule array
+    schedule.push({
+        installment: count,
+        date: now.format('YYYY-MM-DD'), // Valid date after the loop
+        balance: balance,
+        repayWithInt: repayWithInt,
+        principalRepay: principalRepay,
+        interest: interest,
+        status: "Not Serviced",
+        clientID: clientID
+    });
+
+    // Move `now` forward based on the frequency for the next installment
+    if (frqncy === "Daily") {
+        now.add(1, 'days');
+    } else if (frqncy === "Weekly" && !Biweekly) {
+        now.add(7, 'days');
+    } else if (frqncy === "Monthly") {
+      console.log(repayGap);
+        now.add(repayGap, 'months');
+    } else if (frqncy === "Weekly" && Biweekly) {
+        now.add(14, 'days');
+    }
+
+    // Update remaining amount and increment installment count
+    AmountWithInt = AmountWithInt.minus(repayment);
+    count++;
+}
+
+
+// Log the repayment schedule array
+console.log("Repayment Schedule:", schedule);
+    return( schedule );
+}
+});
+/////////////////////disbursement report/////////////
+// API endpoint to disbursement detail report
+app.post('/disbursedetail-report', async (req, res) => {
+  const { startDate, endDate,code } = req.body;
+
+  // SQL query string, with placeholders for dates
+  const query = `
+    SELECT 
+      TranID, loans.CustNo, AccountName AS name, GroupID, 
+      SUM(Amount) AS Amount, loanproduct, InterestPercent
+    FROM 
+      transactn 
+      INNER JOIN loans ON loans.loanid = transactn.AccountID
+    WHERE 
+      valuedate BETWEEN @startDate AND @endDate
+      AND (TranID = '010' OR TranID = 'R010')
+      AND loans.custno LIKE @reportBranchCode + '%'
+    GROUP BY 
+      InterestPercent, TranID, loans.CustNo, AccountName, loanproduct, GroupID
+  `;
+
+  try {
+       // Connect to SQL Server
+       await checkPoolConnection(); // Ensure the connection is active
+       const pool = await poolPromise;
+console.log(startDate,endDate,code);
+    // Set up prepared statement
+    const request = new sql.Request();
+    request.input('startDate', sql.Date, startDate);
+    request.input('endDate', sql.Date, endDate);
+    request.input('reportBranchCode', sql.VarChar, code); // replace with dynamic value if needed
+
+    // Execute the query
+    const result = await request.query(query);
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error("SQL Error", error);
+    res.status(500).json({ error: 'Error generating report' });
+  }
+});
+
 /////////////////////////////////////////CREATE ACCOUNT
 app.post('/createAccount', async (req, res) => {
   const {
