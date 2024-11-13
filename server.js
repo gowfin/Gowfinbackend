@@ -2075,17 +2075,17 @@ function generateRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, in
 //     count++;
 // }
 // Check for moratorium period
-if (moratorium > 0 || frqncy === "Monthly") {
+// if (moratorium > 0 || frqncy === "Monthly") {
   if (frqncy === "Daily") {
-      now.add(moratorium, 'days');
+      now.add(moratorium+1, 'days');
   } else if (frqncy === "Weekly" && !Biweekly) {
-      now.add(moratorium, 'weeks');
+      now.add(moratorium+1, 'weeks');
   } else if (frqncy === "Monthly") {
       now.add(moratorium+1, 'months'); //zero moratorium means after 30days(1month) and 1 means 60days(2months)
   } else if (frqncy === "Weekly" && Biweekly) {
-      now.add(moratorium * 2, 'weeks'); // Adjust for bi-weekly
+      now.add(moratorium * 2+2, 'weeks'); // Adjust for bi-weekly
   }
-}
+// }
 while (AmountWithInt.greaterThan(0) && count <= disbinstalCount) {
     let validDateFound = false;
 
