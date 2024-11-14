@@ -1944,11 +1944,12 @@ app.post('/calculate-schedule', async (req, res) => {
     amount, 
     clientID,
     productSettings,
-    instalCount,
+    adjustedProdInstalCount,
     monthCount,
     adjInstalCount,
     selectedInterestType,
-    includeSaturday
+    includeSaturday,
+    disbursedDate
    } = req.body;
   
   
@@ -1975,7 +1976,7 @@ app.post('/calculate-schedule', async (req, res) => {
     let disbinstalCount=''
     if (productSettings === "Adjust Default Product settings") {
       noOfMonths = monthCount;
-      disbinstalCount = adjInstalCount;
+      disbinstalCount =     adjustedProdInstalCount;
       term = instalCount + moratorium;
   } else {
       noOfMonths = product.MonthDuration;
@@ -1983,13 +1984,13 @@ app.post('/calculate-schedule', async (req, res) => {
   }
   
   if (productSettings === "Adjust Default Product settings") {
-    instalCount = adjInstalCount;
+    disbinstalCount  =  adjustedProdInstalCount;
 } else if (adjInstalCount !== "all" && productID.includes("IND")) {
     repayGap = Math.floor(disbinstalCount / parseInt(adjInstalCount));
     disbinstalCount = parseInt(adjInstalCount);
 } else if (adjInstalCount === "BI-Weekly" && productID.includes("REGLN")) {
     repayGap = 0;
-    instalCount = 12;
+    disbinstalCount = 12;
     Biweekly = true;
 } else {
     Biweekly = false;
@@ -2014,8 +2015,12 @@ const intRepay = totalInt.dividedBy(disbinstalCount);
 // const intRepay = 1000;
 
 
-let now = moment();
- const schedule=generateRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frequency, now, moratorium, clientID, Biweekly, repayGap,includeSaturday);
+let now = moment(disbursedDate);
+// console.log('disbursedDate:----------------------------------',disbursedDate);
+ const schedule=selectedInterestType === "Reducing"? 
+ generateReducingBalRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frequency, now, moratorium, clientID, Biweekly, repayGap,includeSaturday,interestRate,noOfMonths)
+                         :
+ generateRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frequency, now, moratorium, clientID, Biweekly, repayGap,includeSaturday);
  res.json({ schedule });
    } catch (error) {
      console.error(error);
@@ -2041,39 +2046,8 @@ function generateRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, in
       '31-12',
       '01-01']
 
-// while (AmountWithInt.greaterThan(0) && count <= disbinstalCount) {
-//     let date = now.format('YYYY-MM-DD');
-//     let balance = AmountWithInt.toFixed(2);
-//     let repayWithInt = repayment.toFixed(2);
-//     let principalRepay = repayment.minus(intRepay).toFixed(2);
-//     let interest = intRepay.toFixed(2);
 
-//     // Add an installment object to the schedule array
-//     schedule.push({
-//         installment: count,
-//         date: date,
-//         balance: balance,
-//         repayWithInt: repayWithInt,
-//         principalRepay: principalRepay,
-//         interest: interest,
-//         status: "Not Serviced",
-//         clientID: clientID
-//     });
 
-//     // Update date based on frequency
-//     if (frqncy === "Daily") {
-//         now.add(1, 'days');
-//     } else if (frqncy === "Weekly" && !Biweekly) {
-//         now.add(7, 'days');
-//     } else if (frqncy === "Monthly") {
-//         now.add(repayGap, 'months');
-//     } else if (frqncy === "Weekly" && Biweekly) {
-//         now.add(14, 'days');
-//     }
-
-//     AmountWithInt = AmountWithInt.minus(repayment);
-//     count++;
-// }
 // Check for moratorium period
 // if (moratorium > 0 || frqncy === "Monthly") {
   if (frqncy === "Daily") {
@@ -2147,7 +2121,150 @@ while (AmountWithInt.greaterThan(0) && count <= disbinstalCount) {
 console.log("Repayment Schedule:", schedule);
     return( schedule );
 }
+/////////////////////REDUCING BAL CALCULATION
+function generateReducingBalRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frqncy, now, moratorium, clientID, Biweekly, repayGap,includeSaturday,interestRate,noOfMonths) {
+  let count = 1;
+  let schedule = [];
+  const holidays=['01-05',
+    '12-06',
+    '01-10',
+    '24-12',
+    '25-12',
+    '31-12',
+    '01-01']
+
+    try {
+
+// Initial calculations
+interestRate = (interestRate / 12 * noOfMonths) / disbinstalCount;
+console.log(interestRate);
+
+const fixedAmount = amount;
+const fixedPrin = fixedAmount/disbinstalCount;
+console.log(fixedPrin,disbinstalCount);
+let totalInterest = 0;
+
+// Calculate total interest
+let remainingAmount = fixedAmount;
+for (let x = 1; x <= disbinstalCount; x++) {
+    totalInterest = totalInterest+(remainingAmount*(interestRate / 100));
+    remainingAmount = remainingAmount-fixedPrin;
+}
+
+// let repayment = fixedPrin+(fixedAmount*(interestRate / 100));
+let amountWithInterest = amount+totalInterest;
+remainingAmount = fixedAmount; //to continue calculating with the initial disbursement Amount
+if (frqncy === "Daily") {
+  now.add(moratorium+1, 'days');
+} else if (frqncy === "Weekly" && !Biweekly) {
+  now.add(moratorium+1, 'weeks');
+} else if (frqncy === "Monthly") {
+  now.add(moratorium+1, 'months'); //zero moratorium means after 30days(1month) and 1 means 60days(2months)
+} else if (frqncy === "Weekly" && Biweekly) {
+  now.add(moratorium * 2+2, 'weeks'); // Adjust for bi-weekly
+}
+// Populate the loan schedule
+while (amountWithInterest>0 && count <= disbinstalCount) {
+  let validDateFound = false;
+    
+    // Adjust date based on frequency and moratorium
+    if (frqncy.toLowerCase() === "daily") {
+        now.add(moratorium + 1, 'days');
+    } else if (frqncy.toLowerCase() === "weekly") {
+      now.add(7, 'days');
+    } else if (frqncy.toLowerCase() === "monthly") {
+      now.add(1, 'month');
+    }
+    else if (frqncy === "Weekly" && Biweekly) {
+      now.add(2, 'weeks'); // Adjust for bi-weekly
+    }
+
+ // Loop to find the next valid date, skipping holidays and weekends if necessary
+ while (!validDateFound) {
+  // let date = now.format('YYYY-MM-DD');
+  let dayOfWeek = now.day(); // 0 = Sunday, 6 = Saturday
+  let formattedHoliday = now.format('DD-MM');
+
+  // Check if the date is not a holiday and meets the weekend rules
+  if (
+      !holidays.includes(formattedHoliday) &&                      // Not a holiday
+      (includeSaturday || (dayOfWeek !== 0 && dayOfWeek !== 6)) && // Include/exclude Saturdays
+      (dayOfWeek !== 0)                                            // Exclude Sundays always
+  ) {
+      validDateFound = true; // Valid date found, we can add it to the schedule
+  } else {
+      now.add(1, 'days'); // Move to the next day if the date is invalid
+  }
+}
+
+
+    const interestRepayment = remainingAmount*(interestRate / 100);
+    repayment = fixedPrin+interestRepayment;
+
+    schedule.push({
+        installment: count,
+        date: now.format('YYYY-MM-DD'),
+        balance: amountWithInterest.toFixed(2),
+        repayWithInt: repayment.toFixed(2),
+        principalRepay: fixedPrin.toFixed(2),
+        interest: interestRepayment.toFixed(2),
+        status: "Not Serviced",
+        clientID: clientID
+    });
+
+    amountWithInterest = amountWithInterest-repayment;
+    remainingAmount=remainingAmount-fixedPrin;
+    count++;
+}
+
+console.log("Loan Schedule:", schedule);
+return(schedule);
+} catch (err) {
+console.error("Error:", err);
+}
+}
+//////////////////END REDUCING BAL
 });
+/////////SUBMIT DISBURSEMENT//////////////////
+app.post('/disburseLoan', async (req, res) => {
+  const { clientId, amount,selectedProduct,accountName } = req.body;
+    // Connect to SQL Server
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+  try {
+    
+    
+    // Query 1: Check for existing loan
+    const result = await pool.request()
+      .input('clientId', sql.VarChar, clientId)
+      .input('selectedProduct', sql.VarChar, selectedProduct)
+      .query(`SELECT COUNT(*) AS loanCount FROM loans WHERE Custno = @clientId AND Status NOT IN ('closed', 'cancel') AND LoanProduct = @selectedProduct`);
+    
+    if (result.recordset[0].loanCount > 0) {
+      return res.json({ success: false, message: "The user already has an active loan of this product." });
+    }
+
+    // Query 2: Get next loan ID
+    const loanIDResult = await pool.request()
+      .query(`SELECT MAX(count) AS count FROM loans`);
+    const nextLoanID = "300" + ('0000000' + (loanIDResult.recordset[0].count + 1)).slice(-7);
+
+    // Insert new loan
+    await pool.request()
+      .input('clientId', sql.VarChar, clientId)
+      .input('loanID', sql.VarChar, nextLoanID)
+      .input('selectedProduct', sql.VarChar, selectedProduct)
+      .input('amount', sql.Decimal(18, 2), amount)
+      .input('accountName', sql.VarChar, accountName)
+      .query(`INSERT INTO loans (Custno, LoanID, LoanProduct, DisbursedDate, OutstandingBal, Status,AccountName) VALUES (@clientId, @loanID, @selectedProduct, GETDATE(), @amount, 'Pending',@accountName)`);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error disbursing loan:", error);
+    res.status(500).json({ success: false, message: "An error occurred during loan disbursement." });
+  }
+});
+
 /////////////////////disbursement report/////////////
 // API endpoint to disbursement detail report
 app.post('/disbursedetail-report', async (req, res) => {
@@ -2189,7 +2306,71 @@ console.log(startDate,endDate,code);
     res.status(500).json({ error: 'Error generating report' });
   }
 });
+/////////////////////////GL Transactions/////////////////
+app.post('/getglincome', async (req, res) => {
+  const { branch} = req.body;
+  const BranchCode=branch.slice(0,3);
+    // Connect to SQL Server
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+    try {
+      // Query to fetch incomecode
+      const result = await sql.query(`
+        SELECT 
+          replace(coaNbr, '-002', ${BranchCode}) + '-' + coaName AS incomecode
+        FROM 
+          glcoa
+        WHERE 
+          coatype = 'I' 
+          AND len(coanbr) = 9 
+          AND coaNbr > '31313'
+      `);
+  
+      // Transform the result to an array of incomecodes
+      const incomeCodes = result.recordset.map(row => row.incomecode);
+  
+      // Return the array as a JSON response
+      
+      res.json(incomeCodes);
+      }
+      catch(error){
+  console.error("SQL Error", error);
+  res.status(500).json({ error: 'Error generating income codes' });
+}
+});
+//////////expense
+app.post('/getglexpense', async (req, res) => {
+  const { branch} = req.body;
+  const BranchCode=branch.slice(0,3);
 
+    // Connect to SQL Server
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+    try {
+      // Query to fetch incomecode
+      const result = await sql.query(`
+        SELECT 
+          replace(coaNbr, '-002', ${BranchCode}) + '-' + coaName AS expensecode
+        FROM 
+          glcoa
+        WHERE 
+          coatype = 'E' 
+          AND len(coanbr) = 9 
+          AND coaNbr > '41225'
+      `);
+  
+      // Transform the result to an array of incomecodes
+      const expenseCodes = result.recordset.map(row => row.expensecode);
+  
+      // Return the array as a JSON response
+      console.log(expenseCodes);
+      res.json(expenseCodes);
+      }
+      catch(error){
+  console.error("SQL Error", error);
+  res.status(500).json({ error: 'Error generating expense codes' });
+}
+});
 /////////////////////////////////////////CREATE ACCOUNT
 app.post('/createAccount', async (req, res) => {
   const {
