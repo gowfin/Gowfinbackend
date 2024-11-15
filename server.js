@@ -2227,8 +2227,10 @@ console.error("Error:", err);
 });
 /////////SUBMIT DISBURSEMENT//////////////////
 app.post('/disburseLoan', async (req, res) => {
-  const { clientId, amount,selectedProduct,accountName } = req.body;
-    // Connect to SQL Server
+  console.log(req.body);
+  const { clientId, amount,selectedProduct,accountName,selectedInterestType,GroupID, productSettings,installment,disbursedDate} = req.body;
+   
+  // Connect to SQL Server
     await checkPoolConnection(); // Ensure the connection is active
     const pool = await poolPromise;
   try {
@@ -2256,7 +2258,12 @@ app.post('/disburseLoan', async (req, res) => {
       .input('selectedProduct', sql.VarChar, selectedProduct)
       .input('amount', sql.Decimal(18, 2), amount)
       .input('accountName', sql.VarChar, accountName)
-      .query(`INSERT INTO loans (Custno, LoanID, LoanProduct, DisbursedDate, OutstandingBal, Status,AccountName) VALUES (@clientId, @loanID, @selectedProduct, GETDATE(), @amount, 'Pending',@accountName)`);
+      .input('selectedInterestType',sql.VarChar,selectedInterestType)
+      .input('GroupID',sql.VarChar,GroupID) 
+      .input('productSettings',sql.VarChar,productSettings) 
+      .input('installment',sql.VarChar,installment) 
+      .input('disbursedDate',sql.Date,disbursedDate)
+      .query(`INSERT INTO loans (Custno, LoanID, LoanProduct, DisbursedDate, OutstandingBal, Status,AccountName,GroupID,interestPercent,BVN,instalment) VALUES (@clientId, @loanID, @selectedProduct, @disbursedDate, -@amount, 'Pending',@accountName,@GroupID, @selectedInterestType,@productSettings,@installment)`);
 
     res.json({ success: true });
   } catch (error) {
@@ -2309,7 +2316,8 @@ console.log(startDate,endDate,code);
 /////////////////////////GL Transactions/////////////////
 app.post('/getglincome', async (req, res) => {
   const { branch} = req.body;
-  const BranchCode=branch.slice(0,3);
+  const BranchCode="-"+branch.slice(0,3);
+  // console.log(BranchCode);
     // Connect to SQL Server
     await checkPoolConnection(); // Ensure the connection is active
     const pool = await poolPromise;
@@ -2341,7 +2349,7 @@ app.post('/getglincome', async (req, res) => {
 //////////expense
 app.post('/getglexpense', async (req, res) => {
   const { branch} = req.body;
-  const BranchCode=branch.slice(0,3);
+  const BranchCode="-"+branch.slice(0,3);
 
     // Connect to SQL Server
     await checkPoolConnection(); // Ensure the connection is active
@@ -2363,7 +2371,7 @@ app.post('/getglexpense', async (req, res) => {
       const expenseCodes = result.recordset.map(row => row.expensecode);
   
       // Return the array as a JSON response
-      console.log(expenseCodes);
+      // console.log(expenseCodes);
       res.json(expenseCodes);
       }
       catch(error){
