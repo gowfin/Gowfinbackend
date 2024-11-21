@@ -2378,7 +2378,122 @@ app.post('/getglexpense', async (req, res) => {
   console.error("SQL Error", error);
   res.status(500).json({ error: 'Error generating expense codes' });
 }
+});/////////////////Bank GL Posting
+app.post('/getglbank', async (req, res) => {
+  const { branch} = req.body;
+  const BranchCode="-"+branch.slice(0,3);
+  // console.log(BranchCode);
+    // Connect to SQL Server
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+    try {
+      // Query to fetch incomecode
+      const result = await sql.query(`
+        SELECT 
+          replace(coaNbr, '-002', ${BranchCode}) + '-' + coaName AS bankcode
+        FROM 
+          glcoa
+        WHERE 
+          coatype = 'A' 
+          AND len(coanbr) = 9 
+           AND coaNbr > '11105' AND  coaNbr < '12402'
+      `);
+  
+      // Transform the result to an array of incomecodes
+      const bankCodes = result.recordset.map(row => row.bankcode);
+  
+      // Return the array as a JSON response
+      
+      res.json(bankCodes);
+      }
+      catch(error){
+  console.error("SQL Error", error);
+  res.status(500).json({ error: 'Error generating income codes' });
+}
+});///////////Posting GL Assets
+app.post('/getglasset', async (req, res) => {
+  const { branch} = req.body;
+  const BranchCode="-"+branch.slice(0,3);
+
+    // Connect to SQL Server
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+    try {
+      // Query to fetch incomecode
+      const result = await sql.query(`
+        SELECT 
+          replace(coaNbr, '-002', ${BranchCode}) + '-' + coaName AS assetcode
+        FROM 
+          glcoa
+        WHERE 
+          coatype = 'A' 
+          AND len(coanbr) = 9 
+          AND coaNbr > '11251' AND  coaNbr < '20000' AND coaNbr NOT LIKE'1310%'
+      `);
+  
+      // Transform the result to an array of incomecodes
+      const assetCodes = result.recordset.map(row => row.assetcode);
+  
+      // Return the array as a JSON response
+      // console.log(expenseCodes);
+      res.json(assetCodes);
+      }
+      catch(error){
+  console.error("SQL Error", error);
+  res.status(500).json({ error: 'Error generating expense codes' });
+}
 });
+
+////////////JOURNAL POSTING
+app.post("/journaltransactions", async (req, res) => {
+  const { amount, debitGL, creditGL, comment, createdBy,branchCode,journalType } = req.body;
+
+  if (!amount || !debitGL || !creditGL || !comment || !createdBy) {
+    return res.status(400).send("All fields are required.");
+  }
+
+  const transactionNumber = generateTransactionNumber('jnl');
+
+  try {
+     // Connect to SQL Server
+     await checkPoolConnection(); // Ensure the connection is active
+     const pool = await poolPromise;
+    const query = `
+      INSERT INTO transactn (Custno, AccountID, tranid, Amount, DebitGL, CreditGL, ValueDate, DateEffective, StmtRef, CreatedBy, TransactionNbr,BranchID)
+      VALUES (@Custno, @AccountID, @tranid, @Amount, @DebitGL, @CreditGL, @ValueDate, @DateEffective, @StmtRef, @CreatedBy, @TransactionNbr,@BranchID)
+    `;
+
+    const request = pool.request();
+    request.input("Custno", sql.VarChar, branchCode+journalType); // Replace as needed
+    request.input("AccountID", sql.VarChar, "Journal");
+    request.input("tranid", sql.VarChar, "020");
+    request.input("Amount", sql.Decimal, amount);
+    request.input("DebitGL", sql.VarChar, debitGL);
+    request.input("CreditGL", sql.VarChar, creditGL);
+    request.input("ValueDate", sql.DateTime, new Date());
+    request.input("DateEffective", sql.DateTime, new Date());
+    request.input("BranchID", sql.VarChar, comment);
+    request.input("StmtRef", sql.VarChar, comment);
+    request.input("CreatedBy", sql.VarChar, createdBy);
+    request.input("TransactionNbr", sql.VarChar, transactionNumber);
+
+    await request.query(query);
+
+    res.status(200).send("Transaction recorded successfully!");
+  } catch (error) {
+    console.error("SQL error:", error);
+    res.status(500).send("An error occurred while saving the transaction.");
+  }
+});
+
+// const generateTransactionNumber = () => {
+//   const timestamp = new Date().getTime();
+//   const randomNumber = Math.floor(100000 + Math.random() * 900000); // 6-digit random
+//   return `${new Date().getFullYear()}${randomNumber}`;
+// };
+
+// module.exports = router;
+
 /////////////////////////////////////////CREATE ACCOUNT
 app.post('/createAccount', async (req, res) => {
   const {
