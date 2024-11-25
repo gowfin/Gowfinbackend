@@ -1207,7 +1207,7 @@ const TTLSDB = `+234${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slic
             await pool.request().query(`UPDATE license SET licensestatus = 'expired'`);
             return res.status(400).json({ message: 'License has expired. Please renew.' });
         } else if (diff > 0 && diff <= 30) {
-            res.status(200).json({ message: `Your license expires in ${diff} day(s).` });
+            res.status(200).json({ message: `Your license expires in ${diff} day(s).`,sesdate: Ses_date });
 
             // Update DaysUsed and last login
             await pool.request()
