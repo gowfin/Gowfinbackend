@@ -1911,7 +1911,62 @@ app.post('/getbulkdeposits', async (req, res) => {
   }
 });
 /////////////////////////////////////////////////////////////////////////////////////
-// Endpoint to get fieldprint
+// Endpoint to get Bulk posting loan data
+app.post('/getfieldprintpostinggroup', async (req, res) => {
+  const code = req.body.code; // Get group code from request body
+  const date = new Date(); // Get current date
+  const formattedDate = date.toISOString().split('T')[0]; // Format date
+
+  const sqlQuery = `
+     SELECT 
+    d.CustNo,
+    d.AccountName,
+    MAX(l.loanID) AS loanID,            -- Use MAX to get a single LoanID
+    MAX(l.LoanProduct) AS LoanProduct,   -- Use MAX to get a single LoanProduct
+    MAX(l.DisbursedDate) AS DisbursedDate, -- Use MAX to get a single DisbursedDate
+    MAX(-l.OutstandingBal) AS OutstandingBal, -- Use MAX to get a single OutstandingBal
+    MAX(l.instalment) AS instalment,      -- Use MAX to get a single instalment
+    d.AccountID,
+    MAX(d.RunningBal) AS RunningBal,      -- Use MAX to get a single RunningBal
+    UPPER(MAX(d.ProductID)) AS ProductID,         -- Use MAX to get a single ProductID
+    MAX(interestPercent) AS interestPercent
+    FROM 
+    loans l
+INNER JOIN 
+    deposit d ON l.custno = d.custno 
+WHERE 
+    d.groupID = @groupID 
+    AND l.Status = 'Active' 
+    AND d.Status <> 'Closed'
+GROUP BY 
+    d.CustNo, d.AccountName, d.AccountID
+ORDER BY 
+    d.CustNo;
+
+      `;
+
+  try {
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+   
+    const result = await pool.request()
+    .input('groupId', sql.VarChar, code) // Use input for named parameter
+    .query(sqlQuery);
+    
+    // Return success response
+     
+
+       res.status(200).json(result.recordset);
+       console.log(result.recordset);
+  } catch (err) {
+      console.error(err);
+     return({status:'failed',err:err.message.replace('mssql-70716-0.cloudclusters.net:19061','server')})
+
+  }
+});
+
+/////////////////////////////////////////////////////////
+// Endpoint to get fieldprint report
 app.post('/getfieldprint', async (req, res) => {
   const groupname = req.body.groupname; 
   const branch = req.body.branch; 
