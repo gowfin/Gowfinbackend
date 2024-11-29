@@ -1970,34 +1970,70 @@ ORDER BY
 app.post('/getfieldprint', async (req, res) => {
   const groupname = req.body.groupname; 
   const branch = req.body.branch; 
-  console.log(groupname,branch);
-  const date = new Date(); // Get current date
-  const formattedDate = date.toISOString().split('T')[0]; // Format date
- const sqlQuery =`
- select * from fieldprintview
-where groupid=@groupname and left(custno,3) =@branch
-order by custno
- `;
-    try {
+  console.log('Groupname:', groupname);
+  console.log('Branch:', branch);
+
+  const sqlQ = `
+    SELECT PrimaryOfficerID, MeetingDay 
+    FROM groups WHERE groupid = @groupname  and branch=@branch
+  `;
+
+  const sqlQuery = `
+    SELECT * 
+    FROM fieldprintview
+    WHERE groupid = @groupname AND LEFT(custno, 3) = @branch
+    ORDER BY custno
+  `;
+
+  try {
     await checkPoolConnection(); // Ensure the connection is active
     const pool = await poolPromise;
-   
+
+    // Fetch officer and meeting day
+    const resultQ = await pool.request()
+      .input('groupname', sql.VarChar, groupname) 
+      .input('branch', sql.VarChar, branch) 
+      .query(sqlQ);
+
+    console.log('ResultQ:', resultQ);
+
+    // Initialize variables
+    let officer = null;
+    let meetingDay = null;
+
+    if (resultQ.recordset && resultQ.recordset.length > 0) {
+      
+      officer = resultQ.recordset[0].PrimaryOfficerID;
+      meetingDay = resultQ.recordset[0].MeetingDay;
+    } else {
+      console.log('No results found for officer and meeting day.');
+    }
+
+    // Fetch field print view records
     const result = await pool.request()
-    .input('groupname', sql.VarChar, groupname) 
-    .input('branch', sql.VarChar, branch) 
-    .query(sqlQuery);
+      .input('groupname', sql.VarChar, groupname) 
+      .input('branch', sql.VarChar, branch) 
+      .query(sqlQuery);
     
-    // Return success response
-     
+    // Return combined response
+    res.status(200).json({
+      officer,
+      meetingDay,
+      records: result.recordset
+    });
 
-       res.status(200).json(result.recordset);
-       console.log(result.recordset);
+    // console.log('Officer:', officer);
+    // console.log('MeetingDay:', meetingDay);
+  
   } catch (err) {
-      console.error(err);
-     return({status:'failed',err:err.message.replace('mssql-70716-0.cloudclusters.net:19061','server')})
-
+    console.error(err);
+    res.status(500).json({
+      status: 'failed',
+      error: err.message.replace('mssql-70716-0.cloudclusters.net:19061', 'server')
+    });
   }
 });
+
 ///////////////////////////////SUBMIT DISBURSEMENT///////////////
 app.post('/calculate-schedule', async (req, res) => {
   const Decimal = require('decimal.js');
