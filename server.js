@@ -254,14 +254,17 @@ app.post('/login', async (req, res) => {
 app.post('/get_accounts', async (req, res) => {
   try {
     // Connect to the SQL Server
- 
+    
     await checkPoolConnection(); // Ensure the connection is active
     const sql = await poolPromise;
     console.log('Connected to the database'); 
     console.log(req.body);
     const custno=req.body.custno;
+    const showAllAccounts=req.body.showAllAccounts;
     // Query the group table
-    const result = await sql.query`select  custno,accountid, accountname,runningbal,productid,groupid,status from accountbal where custno=${custno}`;
+    const result =showAllAccounts? await sql.query`select  custno,accountid, accountname,runningbal,productid,groupid,status from accountbal where custno=${custno} order by status`
+    : await sql.query`select  custno,accountid, accountname,runningbal,productid,groupid,status from accountbal where status not in ('closed','cancel') and custno=${custno} order by status`;
+    ;
      console.log(result.recordset);
     res.set('Content-Type', 'application/json'); // Set content type
     return res.json(result.recordset);
@@ -1207,12 +1210,13 @@ const TTLSDB = `+234${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slic
             await pool.request().query(`UPDATE license SET licensestatus = 'expired'`);
             return res.status(400).json({ message: 'License has expired. Please renew.' });
         } else if (diff > 0 && diff <= 30) {
+          // Update DaysUsed and last login
+          await pool.request()
+          .query(`UPDATE license SET DaysUsed = DaysUsed + ${intervalLogin}, lastlogin = '${todayDate.format('YYYY-MM-DD')}'`);
+
             res.status(200).json({ message: `Your license expires in ${diff} day(s).`,sesdate: Ses_date });
 
-            // Update DaysUsed and last login
-            await pool.request()
-                .query(`UPDATE license SET DaysUsed = DaysUsed + ${intervalLogin}, lastlogin = '${todayDate.format('YYYY-MM-DD')}'`);
-        }
+                    }
         // console.log('here');
         res.status(200).json({ message: '',sesdate: Ses_date });
 
@@ -1631,6 +1635,73 @@ app.post('/getbulkloans', async (req, res) => {
 
   }
 });
+
+/////////////////////CREATE NEW ACCOUNTS/////////////////////////////////////
+// API: Check and Add Savings Account
+app.post("/newaccount", async (req, res) => {
+  const { custno, name, groupID, product } = req.body;
+console.log({ custno, name, groupID, product });
+  try {
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+    // Check if the product is configured and active
+    const query1b = `
+      SELECT COUNT(productid) AS found 
+      FROM product 
+      WHERE productdesc LIKE @product AND producttype = 'savings'`;
+
+    const foundResult = await pool.request()
+      .input("product", sql.NVarChar, `%${product}%`)
+      .query(query1b);
+
+    if (foundResult.recordset[0].found < 1) {
+      return res.status(400).send("This Product is not configured by Admin as an Active Product. Please contact Admin.");
+    }
+
+    // Check if the user already has a running savings account of the same product
+    const query1 = `
+      SELECT COUNT(Custno) AS no 
+      FROM Deposit 
+      WHERE Status = 'Active' AND ProductId LIKE @product AND Custno = @custno`;
+
+    const noResult = await pool.request()
+      .input("product", sql.NVarChar, `%${product}%`)
+      .input("custno", sql.NVarChar, custno)
+      .query(query1);
+
+    if (noResult.recordset[0].no > 0) {
+      return res.status(400).send("The user is still having a running Savings Account of the same product. Account cannot be created.");
+    }
+
+    // Create a new savings account
+    const query2 = `
+      INSERT INTO Deposit (CustNo, AccountName, AccountID, DateCreated, RunningBal, LastTrans, ProductID, Status, GroupID, BVN)
+      VALUES (@custno, @name, @accountID, FORMAT(GETDATE(), 'yyyy-MM-dd'), 0, 0, @product, 'Active', @groupID, 'optional')`;
+
+    const lastSerialQuery = "SELECT MAX(serial) AS serial FROM Deposit";
+    const lastSerialResult = await pool.request().query(lastSerialQuery);
+    const lastSerial = lastSerialResult.recordset[0].serial || 0;
+    const num=lastSerial + 1;
+    const accountID =product.includes('Vol')? '250'+(String(num).padStart(7, '0')):'200'+(String(num).padStart(7, '0'));
+
+    await pool.request()
+      .input("custno", sql.NVarChar, custno)
+      .input("name", sql.NVarChar, name)
+      .input("accountID", sql.NVarChar, accountID)
+      .input("product", sql.NVarChar, `${product}`)
+      .input("groupID", sql.NVarChar, groupID)
+      .query(query2);
+
+    res.send(`${product} created successfully.`);
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).send("An error occurred while processing your request.");
+  }
+});
+///////////////////////END OF CREATING NEW ACCOUNTS
+
+
+
 ///////////////////////////////////Both deposit and repayment bulk posting
 app.post('/postbulkdepositsrepayments', async (req, res) => {
   const deposits = req.body.depositToPost; // Get deposits array from request body
