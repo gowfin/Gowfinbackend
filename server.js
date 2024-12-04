@@ -2884,7 +2884,67 @@ app.post('/overduereport', async (req, res) => {
       res.status(500).json({ error: 'Error executing query' });
   } 
 });
+////////////////Daily Cash Book////////////////////
+// Get Daily Cash Book Report
+app.post('/dailycashbook', async (req, res) => {
+  const { branchCode, selectedDate } = req.body;
 
+  try {
+    // Ensure the database connection is active
+    await checkPoolConnection(); 
+    const pool = await poolPromise;
+
+    // SQL Query to fetch cash balance
+    const cashBalanceQuery = `
+      select CoaNbr,CoaName,coalesce(openningDebit,0)-coalesce(openningCredit,0) Openning,isnull(Credit,0) Credit,isnull(Debit,0)Debit from glcoa A 
+ inner join 
+ (select DebitGL openDebit,SUM(amount) openningDebit from Transactn  
+where (DebitGL is not null ) and custno<>'Opening' and DateEffective<@SelectedDate and YEAR(DateEffective)=YEAR(@SelectedDate) and DebitGL like'1110%' and left(custno,3)=@branchCode group by debitGL )Ba   
+on CoaNbr=openDebit left outer join  
+(select Creditgl openCredit,SUM(amount) openningCredit from Transactn  
+ where ( CreditGL is not null ) and custno<>'Opening' and DateEffective<@SelectedDate and YEAR(DateEffective)=YEAR(@SelectedDate)and CreditGL like'1110%' and left(custno,3)=@branchCode group by CreditGL )Bb   
+  on CoaNbr=openCredit left outer join  
+ (select creditgl,SUM(amount) Credit from Transactn  
+ where CreditGL is not null and custno<>'Opening' and  DateEffective=@SelectedDate and YEAR(DateEffective)=YEAR(@SelectedDate) and CreditGL like'1110%' and left(custno,3)=@branchCode group by CreditGL) C    
+ on  coanbr=C.CreditGL left outer join (select Debitgl,SUM(amount)Debit from Transactn   
+ where DebitGL is not null and custno<>'Opening' and DateEffective =@SelectedDate and YEAR(DateEffective)=YEAR(@SelectedDate) and DebitGL like'1110%' and left(custno,3)=@branchCode group by DebitGL) D  
+ on  A.coanbr=D.DebitGL
+   ` ;
+
+    // SQL Query to fetch transaction summary
+    const transactionQuery = `
+    select Sum(Amount) Amount,TranID,isnull(b.productid,'GL') productid,CreditGL,DebitGL 
+    from Transactn a left outer join (select loanid accountid,loanproduct productid from Loans where left(custno,3)=@branchCode union select productid,AccountID from Deposit where left(custno,3)=@branchCode) b
+     on a.AccountID=b.accountid 
+     where valuedate=@SelectedDate and custno<>'Opening' and left(custno,3)=@branchCode
+     group by TranID,b.productid,CreditGL,DebitGL 
+    `;
+
+    // Run both queries in parallel to improve efficiency
+    const [cashBalanceResult, transactionResult] = await Promise.all([
+      pool
+        .request()
+        .input('selectedDate', sql.Date, selectedDate)
+        .input('branchCode', sql.VarChar, branchCode)
+        .query(cashBalanceQuery),
+      pool
+        .request()
+        .input('selectedDate', sql.Date, selectedDate)
+        .input('branchCode', sql.VarChar, branchCode)
+        .query(transactionQuery),
+    ]);
+
+    // Respond with the results
+    res.json({
+      cashBalance: cashBalanceResult.recordset,
+      transactions: transactionResult.recordset,
+    });
+  } catch (error) {
+    console.error('Error fetching daily cash book report:', error);
+    res.status(500).send('Error fetching daily cash book report');
+  }
+});
+/////end og daily cash book
 ///////////////////////////////Trial Balance Reports///////////////
 // API to fetch trial balance report
 app.post('/trialbalance', async (req, res) => {
