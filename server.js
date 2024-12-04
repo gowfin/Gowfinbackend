@@ -1172,59 +1172,63 @@ app.post('/insert_balancediff', async (req, res) => {
 ////////Post Endpoint for checking license
 
 app.post('/checklicense', async (req, res) => {
-    try {
+  try {
       await checkPoolConnection(); // Ensure the connection is active
       const pool = await poolPromise;
-        const licenseQuery = 'SELECT * FROM license cross join  company';
-        const varQuery = 'SELECT TTLS FROM var';
 
-        // Get current date in 'yyyy-MM-dd' format
-        const today = moment().format('YYYY-MM-DD');
+      const licenseQuery = 'SELECT * FROM license CROSS JOIN company';
+      const varQuery = 'SELECT TTLS FROM var';
 
-        const varResult = await pool.request().query(varQuery);
-        const TTLS = varResult.recordset[0]?.TTLS;
+      // Get current date in 'yyyy-MM-dd' format
+      const today = moment().format('YYYY-MM-DD');
 
-        const licenseResult = await pool.request().query(licenseQuery);
-        if (!licenseResult.recordset.length) {
-            return res.status(404).json({ message: 'License not found' });
-        }
+      const varResult = await pool.request().query(varQuery);
+      const TTLS = varResult.recordset[0]?.TTLS;
 
-        const license = licenseResult.recordset[0];
-        const { ExpiryDate, Lastlogin, StartDate, Duration, licenseStatus, DaysUsed,Ses_date } = license;
-      //  console.log({ ExpiryDate, Lastlogin, StartDate, Duration, licenseStatus, DaysUsed });
-        const expDate = moment(ExpiryDate);
-        const lastLogon = moment(Lastlogin);
-        const todayDate = moment(today);
+      const licenseResult = await pool.request().query(licenseQuery);
+      if (!licenseResult.recordset.length) {
+          return res.status(404).json({ message: 'License not found' });
+      }
 
-        const diff = expDate.diff(todayDate, 'days'); // Remaining license days
-        const intervalLogin = todayDate.diff(lastLogon, 'days'); // Interval in days between logins
+      const license = licenseResult.recordset[0];
+      const { ExpiryDate, Lastlogin, StartDate, Duration, licenseStatus, DaysUsed, Ses_date } = license;
 
-        // Ensure ExpiryDate is a string in 'YYYY-MM-DD' format
-const formattedExpiryDate = new Date(ExpiryDate).toISOString().split('T')[0];
+      const expDate = moment(ExpiryDate);
+      const lastLogon = moment(Lastlogin);
+      const todayDate = moment(today);
 
-// Construct TTLSDB using slices of the formatted string
-const TTLSDB = `+234${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slice(2, 4)}${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slice(8, 10)}${Duration}`;
-        if (TTLSDB !== TTLS) {
-            return res.status(400).json({ message: 'Invalid license. Possible tampering detected.' });
-        } else if (diff <= 0) {
-            await pool.request().query(`UPDATE license SET licensestatus = 'expired'`);
-            return res.status(400).json({ message: 'License has expired. Please renew.' });
-        } else if (diff > 0 && diff <= 30) {
+      const diff = expDate.diff(todayDate, 'days'); // Remaining license days
+      const intervalLogin = todayDate.diff(lastLogon, 'days'); // Interval in days between logins
+
+      // Ensure ExpiryDate is a string in 'YYYY-MM-DD' format
+      const formattedExpiryDate = new Date(ExpiryDate).toISOString().split('T')[0];
+
+      // Construct TTLSDB using slices of the formatted string
+      const TTLSDB = `+234${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slice(2, 4)}${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slice(8, 10)}${Duration}`;
+      
+      if (TTLSDB !== TTLS) {
+          return res.status(400).json({ message: 'Invalid license. Possible tampering detected.' });
+      }
+
+      if (diff <= 0) {
+          await pool.request().query(`UPDATE license SET licensestatus = 'expired'`);
+          return res.status(400).json({ message: 'License has expired. Please renew.' });
+      }
+
+      if (diff > 0 && diff <= 30) {
           // Update DaysUsed and last login
-          await pool.request()
-          .query(`UPDATE license SET DaysUsed = DaysUsed + ${intervalLogin}, lastlogin = '${todayDate.format('YYYY-MM-DD')}'`);
+          await pool.request().query(`UPDATE license SET DaysUsed = DaysUsed + ${intervalLogin}, lastlogin = '${todayDate.format('YYYY-MM-DD')}'`);
+          return res.status(200).json({ message: `Your license expires in ${diff} day(s).`, sesdate: Ses_date });
+      }
 
-            res.status(200).json({ message: `Your license expires in ${diff} day(s).`,sesdate: Ses_date });
+      // Default response if no conditions are met
+      return res.status(200).json({ message: '', sesdate: Ses_date });
 
-                    }
-        // console.log('here');
-        res.status(200).json({ message: '',sesdate: Ses_date });
-
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: err.message });
-    }
-  });
+  } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: err.message });
+  }
+});
 
 
 // POST endpoint for approving transactions
@@ -2728,7 +2732,7 @@ app.get('/transactionreports', async (req, res) => {
     const { startDate, endDate, branch } = req.query; // Use req.query for GET request
     await checkPoolConnection(); // Ensure the connection is active
     const pool = await poolPromise;
-    console.log(startDate, endDate, branch);
+    // console.log(startDate, endDate, branch);
 
     const result = await pool.request()
       .input('startDate', sql.Date, new Date(startDate)) // Use sql.Date for the correct type
@@ -2768,8 +2772,206 @@ const generateTransactionNumber = (groupName) => {
   const transactionNumber = `${year}${month}${day}${rand}${cleanGroupName.substring(0, mid + 1)}`;
   return transactionNumber;
 };
+//////////////////////Balance report////////////////////
+app.get('/balances_report', async (req, res) => {
+  try {
+      await checkPoolConnection(); // Ensure the connection is active
+      const pool = await poolPromise;
+
+      // Query 1: Total running balance from deposits
+      const query1 = `SELECT SUM(RunningBal) AS bal FROM deposit WHERE status='Active'`;
+
+      // Query 2: Total outstanding balance and balance with interest from loans
+      const query2 = `
+          SELECT 
+              ABS(SUM(OutstandingBal)) AS bal, 
+              ABS(SUM(OutstandingBal * InterestPercent)) AS BalWithInt 
+          FROM loans 
+          WHERE status='Active'`;
+
+      const result1 = await pool.request().query(query1);
+      const result2 = await pool.request().query(query2);
+
+      // Combine results
+      const data = {
+          depositBalance: result1.recordset[0].bal || 0,
+          loanBalance: result2.recordset[0].bal || 0,
+          loanBalanceWithInterest: result2.recordset[0].BalWithInt || 0,
+      };
+
+      res.json(data);
+  } catch (err) {
+      console.error(err);
+      res.status(500).send('Error fetching balances');
+  } 
+});
 
 
+
+/////////////////////////Overdue Report////////////
+// API to fetch loan overdue report 
+app.post('/overduereport', async (req, res) => {
+  const { SelectedDate, ReportBranchcode } = req.body;
+
+  if (!SelectedDate || !ReportBranchcode) {
+      return res.status(400).json({ error: 'SelectedDate and ReportBranchcode are required.' });
+  }
+
+  const query = `
+      SELECT 
+          ls.CustNo,
+          ls.LoanID,
+          MAX(RunningBal / interestpercent) AS DisbPrin,
+          -outstandingbal AS outstandingbal,
+          disburseddate,
+          accountname,
+          SUM(RepayWithInt) - SUM(servicedInt + ServicedPrin) AS OVAPLusInt,
+          SUM(PrinRepay - ServicedPrin) AS OVAprinOnly,
+          SUM(ServicedPrin) AS PrinRepaid,
+          loanproduct,
+          g.Groupid,
+          lastPayDate,
+          DATEDIFF(day, lastPayDate, GETDATE()) AS daysDue,
+          primaryofficerID AS CSO
+      FROM Loanschedule ls
+      INNER JOIN Loans l ON l.LoanID = ls.LoanID AND l.Custno = ls.Custno
+      INNER JOIN Groups g ON g.GroupID = l.groupid
+      INNER JOIN (
+          SELECT 
+              lns.LoanID, 
+              date AS lastPayDate 
+          FROM Loanschedule lns 
+          INNER JOIN CalculatedCurrentCount ccc 
+              ON lns.loanid = ccc.loanid 
+              AND lns.custno = ccc.custno 
+              AND lns.count = ccc.currentcount 
+          WHERE 
+              (Status = 'not serviced' OR Status = 'Partial') 
+              AND LEFT(lns.custno, 3) = @ReportBranchcode
+      ) d ON d.LoanID = ls.LoanID
+      WHERE 
+          l.status = 'Active' 
+          AND date <= @SelectedDate 
+          AND LEFT(l.custno, 3) = @ReportBranchcode
+      GROUP BY 
+          g.PrimaryOfficerID, 
+          ls.CustNo, 
+          ls.LoanID, 
+          outstandingbal, 
+          accountname, 
+          disburseddate, 
+          lastPayDate, 
+          g.Groupid, 
+          loanproduct
+      HAVING 
+          SUM(PrinRepay - ServicedPrin) > 1 
+          AND SUM(RepayWithInt) - SUM(servicedInt + ServicedPrin) > 0 
+          AND DATEDIFF(day, lastPayDate, GETDATE()) > 1
+      ORDER BY CSO, Groupid`;
+
+  try {
+      await checkPoolConnection(); // Ensure the connection is active
+      const pool = await poolPromise;
+      const result = await pool
+          .request()
+          .input('SelectedDate', sql.Date, SelectedDate)
+          .input('ReportBranchcode', sql.VarChar, ReportBranchcode)
+          .query(query);
+
+      res.json(result.recordset);
+  } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Error executing query' });
+  } 
+});
+
+///////////////////////////////Trial Balance Reports///////////////
+// API to fetch trial balance report
+app.post('/trialbalance', async (req, res) => {
+  const { SelectedDate, ReportBranchcode, SkipZeroBalances } = req.body;
+
+  if (!SelectedDate || !ReportBranchcode) {
+      return res.status(400).json({ error: 'SelectedDate and ReportBranchcode are required.' });
+  }
+
+  let query = `
+      SELECT 
+          LEFT(coanbr, 6) + '${ReportBranchcode}' AS CoaNbr,
+          CoaName,
+          COALESCE(openningDebit, 0) - COALESCE(openningCredit, 0) AS Openning,
+          ISNULL(Credit, 0) AS Credit,
+          ISNULL(Debit, 0) AS Debit,
+          CoaHeader
+      FROM glcoa A
+      LEFT OUTER JOIN (
+          SELECT 
+              DebitGL AS openDebit, 
+              SUM(amount) AS openningDebit
+          FROM Transactn
+          WHERE 
+              DebitGL IS NOT NULL 
+              AND DebitGL LIKE '%-${ReportBranchcode}'
+              AND MONTH(DateEffective) < MONTH('${SelectedDate}')
+              AND YEAR(DateEffective) = YEAR('${SelectedDate}')
+          GROUP BY DebitGL
+      ) Ba ON LEFT(CoaNbr, 5) = LEFT(openDebit, 5)
+      LEFT OUTER JOIN (
+          SELECT 
+              CreditGL AS openCredit, 
+              SUM(amount) AS openningCredit
+          FROM Transactn
+          WHERE 
+              CreditGL IS NOT NULL 
+              AND CreditGL LIKE '%-${ReportBranchcode}'
+              AND MONTH(DateEffective) < MONTH('${SelectedDate}')
+              AND YEAR(DateEffective) = YEAR('${SelectedDate}')
+          GROUP BY CreditGL
+      ) Bb ON LEFT(CoaNbr, 5) = LEFT(openCredit, 5)
+      LEFT OUTER JOIN (
+          SELECT 
+              CreditGL, 
+              SUM(amount) AS Credit
+          FROM Transactn
+          WHERE 
+              CreditGL IS NOT NULL 
+              AND CreditGL LIKE '%-${ReportBranchcode}'
+              AND MONTH(DateEffective) = MONTH('${SelectedDate}')
+              AND YEAR(DateEffective) = YEAR('${SelectedDate}')
+          GROUP BY CreditGL
+      ) C ON LEFT(CoaNbr, 5) = LEFT(C.CreditGL, 5)
+      LEFT OUTER JOIN (
+          SELECT 
+              DebitGL, 
+              SUM(amount) AS Debit
+          FROM Transactn
+          WHERE 
+              DebitGL IS NOT NULL 
+              AND DebitGL LIKE '%-${ReportBranchcode}'
+              AND MONTH(DateEffective) = MONTH('${SelectedDate}')
+              AND YEAR(DateEffective) = YEAR('${SelectedDate}')
+          GROUP BY DebitGL
+      ) D ON LEFT(A.coanbr, 5) = LEFT(D.DebitGL, 5)`;
+
+  if (SkipZeroBalances) {
+      query += `
+          WHERE 
+              (COALESCE(openningDebit, 0) - COALESCE(openningCredit, 0) + ISNULL(Debit, 0) - ISNULL(Credit, 0)) <> 0`;
+  }
+
+  query += ` ORDER BY LEFT(coanbr, 6) + '${ReportBranchcode}'`;
+
+  try {
+        await checkPoolConnection(); // Ensure the connection is active
+      const pool = await poolPromise;
+      const result = await pool.request().query(query);
+
+      res.json(result.recordset);
+  } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Error executing query' });
+  } 
+});
+///////////////////////////////////////End of trial Balance report////////////////
 // Function to send SMS (dummy implementation, replace with actual logic)
 function sendSMS({ branchCode, transactionType, accountID, glno, amount, stmtRef, chequeNbr }) {
   console.log(`Sending SMS for ${transactionType} on account ${accountID}: Amount: ${amount}, GL: ${glno}`);
