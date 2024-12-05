@@ -354,9 +354,13 @@ app.get('/products', async (req, res) => {
 /////////////////////////////////////////
 app.post('/get_staffreport', async (req, res) => {
   try {
+     const sesdate=req.body.sesdate.slice(0,10);
+   
     // await sql.connect(sqlConfig);
     await checkPoolConnection(); // Ensure the connection is active
     const sql = await poolPromise;
+    
+    // console.log(sesdate);
     console.log('Connected to the database'); 
 
     // Assuming you generate a report URL based on the transactions
@@ -451,7 +455,7 @@ LEFT OUTER JOIN
     ) d ON d.LoanID = ls.LoanID 
     WHERE 
         l.status = 'Active' 
-        AND date <= '2024-09-30'
+        AND date <= ${sesdate}
     GROUP BY 
         PrimaryOfficerID  
 ) AS two ON one.PrimaryOfficerID = two.PrimaryOfficerID  
@@ -468,8 +472,8 @@ LEFT OUTER JOIN
         Groups g ON c.GroupID = g.GroupID  
     WHERE 
         tranid IN ('010', 'R010') 
-        AND MONTH(DateEffective) = MONTH('2024-09-30') 
-        AND YEAR(DateEffective) = YEAR('2024-01-01') 
+        AND MONTH(DateEffective) = MONTH(${sesdate}) 
+        AND YEAR(DateEffective) = YEAR(${sesdate}) 
     GROUP BY 
         primaryofficerid
 ) AS twoA ON two.PrimaryOfficerID = twoA.PrimaryOfficerID  
@@ -486,8 +490,8 @@ LEFT OUTER JOIN
         Groups g ON c.GroupID = g.GroupID  
     WHERE 
         tranid IN ('002', 'R002') 
-        AND MONTH(DateEffective) = MONTH('2024-09-30') 
-        AND YEAR(DateEffective) = YEAR('2024-01-01') 
+        AND MONTH(DateEffective) = MONTH(${sesdate}) 
+        AND YEAR(DateEffective) = YEAR(${sesdate}) 
     GROUP BY 
         primaryofficerid 
 ) AS twoB ON one.PrimaryOfficerID = twoB.PrimaryOfficerID 
@@ -530,8 +534,8 @@ LEFT OUTER JOIN
         Groups g ON d.GroupID = g.GroupID  
     WHERE 
         Status = 'Active' 
-        AND MONTH(DateCreated) = MONTH('2024-01-01')   
-        AND YEAR(DateCreated) = YEAR('2024-09-30') 
+        AND MONTH(DateCreated) = MONTH(${sesdate})   
+        AND YEAR(DateCreated) = YEAR(${sesdate}) 
     GROUP BY 
         primaryofficerid 
 ) AS five ON two.PrimaryOfficerID = five.PrimaryOfficerID 
@@ -546,8 +550,8 @@ LEFT OUTER JOIN
         Groups g ON d.GroupID = g.GroupID  
     WHERE 
         Status = 'Closed' 
-        AND MONTH(Dateclosed) = MONTH('2024-01-01') 
-        AND YEAR(Dateclosed) = YEAR('2024-01-01') 
+        AND MONTH(Dateclosed) = MONTH(${sesdate}) 
+        AND YEAR(Dateclosed) = YEAR(${sesdate}) 
     GROUP BY 
         primaryofficerid 
 ) AS six ON two.PrimaryOfficerID = six.PrimaryOfficerID 
@@ -569,8 +573,8 @@ LEFT OUTER JOIN
             Groups g ON c.GroupID = g.GroupID 
         WHERE 
             tranid IN ('010', 'R010') 
-            AND MONTH(valuedate) = MONTH('2024-01-01') 
-            AND YEAR(valuedate) = YEAR('2024-01-01')  
+            AND MONTH(valuedate) = MONTH(${sesdate}) 
+            AND YEAR(valuedate) = YEAR(${sesdate})  
         GROUP BY 
             g.primaryofficerid, Amount, AccountID
     ) AS newboro 
@@ -590,8 +594,8 @@ LEFT OUTER JOIN
         Groups g ON c.GroupID = g.GroupID 
     WHERE 
         tranid = '101' 
-        AND MONTH(valuedate) = MONTH('2024-01-01') 
-        AND YEAR(valuedate) = YEAR('2024-01-01') 
+        AND MONTH(valuedate) = MONTH(${sesdate}) 
+        AND YEAR(valuedate) = YEAR(${sesdate}) 
         AND stmtref LIKE '%loans' 
     GROUP BY 
         primaryofficerid 
