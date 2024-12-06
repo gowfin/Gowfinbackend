@@ -360,7 +360,7 @@ app.post('/get_staffreport', async (req, res) => {
     await checkPoolConnection(); // Ensure the connection is active
     const sql = await poolPromise;
     
-    // console.log(sesdate);
+     console.log(sesdate);
     console.log('Connected to the database'); 
 
     // Assuming you generate a report URL based on the transactions
