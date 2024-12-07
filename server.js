@@ -355,12 +355,10 @@ app.get('/products', async (req, res) => {
 app.post('/get_staffreport', async (req, res) => {
   try {
      const sesdate=req.body.sesdate.slice(0,10);
-   
-    // await sql.connect(sqlConfig);
     await checkPoolConnection(); // Ensure the connection is active
     const sql = await poolPromise;
     
-     console.log(sesdate);
+      // console.log(sesdate);
     console.log('Connected to the database'); 
 
     // Assuming you generate a report URL based on the transactions
@@ -916,7 +914,7 @@ app.get('/workflow', async (req, res) => {
       console.error('SQL error', error);
       res.status(500).send('Error retrieving data');
   } finally {
-      // await sql.close(); // Close the connection
+      
   }
 });
 // Endpoint to fetch Group workflow data
@@ -951,7 +949,7 @@ app.get('/workflowInd', async (req, res) => {
       console.error('SQL error', error);
       res.status(500).send('Error retrieving data');
   } finally {
-      // await sql.close(); // Close the connection
+      
   }
 });
 // Endpoint to get  chart data
@@ -1233,8 +1231,302 @@ app.post('/checklicense', async (req, res) => {
       res.status(500).json({ message: err.message });
   }
 });
+////////////////Group Management///////////////
+// Endpoint to handle group insertion/updating
+app.post('/groupmgt', async (req, res) => {
+  const {
+      groupID,
+      groupName,
+      groupVenue,
+      meetingDay,
+      primaryOfficerID,
+      secondaryOfficerID,
+      maxSize,
+      minSize,
+      branch,
+      branchCode,
+  } = req.body;
+  console.log( {
+    groupID,
+    groupName,
+    groupVenue,
+    meetingDay,
+    primaryOfficerID,
+    secondaryOfficerID,
+    maxSize,
+    minSize,
+    branch,
+    branchCode,
+});
 
+  const currentDate = new Date();
+  const formattedDate = currentDate.toISOString().slice(0, 19).replace('T', ' ');
 
+  try {
+      // Ensure the connection is active
+      await checkPoolConnection();
+      const pool = await poolPromise;
+
+      // Check if the group exists
+      const checkGroupQuery = `SELECT * FROM Groups WHERE GroupID = @groupID`;
+      const checkRequest = pool.request();
+      checkRequest.input('groupID', sql.VarChar, groupID);
+      const checkResult = await checkRequest.query(checkGroupQuery);
+
+      let query;
+      const request = pool.request();
+
+      if (checkResult.recordset.length > 0) {
+          // Update existing group
+          query = `
+              UPDATE Groups 
+              SET 
+                  PrimaryOfficerID = @primaryOfficerID, 
+                  SecondaryOfficerID = @secondaryOfficerID, 
+                  GroupName = @groupName, 
+                  GroupVenue = @groupVenue, 
+                  MeetingDay = @meetingDay, 
+                  MaximumSize = @maxSize, 
+                  Branch = @branch 
+              WHERE GroupID = @groupID
+          `;
+      } else {
+          // Insert new group
+          query = `
+              INSERT INTO Groups (GroupID, GroupName, GroupVenue, MeetingDay, PrimaryOfficerID, SecondaryOfficerID, CreationDate, MaximumSize, MinimumSize, Branch) 
+              VALUES (@groupID, @groupName, @groupVenue, @meetingDay, @primaryOfficerID, @secondaryOfficerID, @formattedDate, @maxSize, @minSize, @branch)
+          `;
+          request.input('formattedDate', sql.DateTime, formattedDate);
+      }
+
+      // Add parameters for both INSERT and UPDATE
+      request
+          .input('groupID', sql.VarChar, groupID)
+          .input('groupName', sql.VarChar, groupID+' Group')
+          .input('groupVenue', sql.VarChar, groupVenue)
+          .input('meetingDay', sql.VarChar, meetingDay)
+          .input('primaryOfficerID', sql.VarChar, primaryOfficerID)
+          .input('secondaryOfficerID', sql.VarChar, secondaryOfficerID)
+          .input('maxSize', sql.Int, maxSize)
+          .input('minSize', sql.Int, minSize)
+          .input('branch', sql.VarChar, branch);
+
+      // Execute the query
+      await request.query(query);
+
+      // Update clients if branch code changes
+      if (branchCode !== branch) {
+          const updateClientsQuery = `UPDATE Clients SET BranchCode = @branch WHERE GroupID = @groupID`;
+          const updateRequest = pool.request();
+          updateRequest.input('branch', sql.VarChar, branch);
+          updateRequest.input('groupID', sql.VarChar, groupID);
+          await updateRequest.query(updateClientsQuery);
+      }
+
+      res.status(200).json({ message: 'Operation completed successfully.' });
+  } catch (err) {
+      console.error('Error:', err);
+      res.status(500).json({ error: 'An error occurred.' });
+  }
+});
+/////////////////////////////////////
+// Endpoint to get group data
+app.post("/get-group", async (req, res) => {
+  const { groupID } = req.body;
+
+  if (!groupID) {
+    return res.status(400).send({ error: "GroupID is required" });
+  }
+
+  try {
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+    const result = await pool
+      .request()
+      .input("GroupID", sql.VarChar, groupID)
+      .query(
+        "SELECT * FROM Groups WHERE GroupID = @GroupID"
+      );
+
+    if (result.recordset.length > 0) {
+      res.status(200).send(result.recordset[0]);
+    } else {
+      res.status(404).send({ error: "Group not found" });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ error: "An error occurred" });
+  }
+});
+
+//////////////////////GL Statement API
+app.post("/gl-report", async (req, res) => {
+  const { glCode, startDate, endDate } = req.body;
+
+  if (!glCode || !startDate || !endDate) {
+    return res.status(400).json({ error: "All fields are required." });
+  }
+
+  const openBalanceQuery = `
+    SELECT ISNULL(SUM(amount), 0) AS openningCredit
+    FROM Transactn
+    WHERE CreditGL = @glCode AND DateEffective < @startDate
+  `;
+
+  const transactionsQuery = `
+    SELECT TranID, AccountID, CreditGL, DebitGL, StmtRef, DateProcessing, ValueDate, RunningBal, 
+           CONVERT(NUMERIC(10, 2), CASE amount WHEN '' THEN '0' ELSE amount END) AS amount
+    FROM Transactn
+    WHERE ValueDate BETWEEN @startDate AND @endDate
+      AND (CreditGL = @glCode OR DebitGL = @glCode)
+    ORDER BY ValueDate
+  `;
+
+  try {
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+
+    const openBalanceResult = await pool
+      .request()
+      .input("glCode", sql.VarChar, glCode)
+      .input("startDate", sql.Date, startDate)
+      .query(openBalanceQuery);
+
+    const transactionsResult = await pool
+      .request()
+      .input("glCode", sql.VarChar, glCode)
+      .input("startDate", sql.Date, startDate)
+      .input("endDate", sql.Date, endDate)
+      .query(transactionsQuery);
+
+    const openingBalance = openBalanceResult.recordset[0].openningCredit;
+    const transactions = transactionsResult.recordset;
+
+    res.json({ openingBalance, transactions });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
+///////////////////////INCOME OR EXPENSE REPORT/////////////////////
+// API endpoint for reports
+app.post('/generateIncomeandorexpensenewclientReport', async (req, res) => {
+  const { reportType, fromDate, toDate, branchCode } = req.body;
+
+  let query = '';
+  let params = [];
+
+  try {
+      switch (reportType) {
+          case 'Income and Expense':
+              query = `
+                  SELECT 
+                      LEFT(coanbr, 6) + @branchCode AS CoaNbr,
+                      CoaName,
+                      CoaType,
+                      CoaHeader,
+                      COALESCE(ISNULL(monthlyDebit, 0) - ISNULL(monthlyCredit, 0), 0) AS Monthly,
+                      COALESCE(ISNULL(YearlyDebit, 0) - ISNULL(YearlyCredit, 0), 0) AS Yearly
+                  FROM glcoa A
+                  LEFT JOIN (
+                      SELECT 
+                          DebitGL AS openDebit, SUM(amount) AS monthlyDebit 
+                      FROM Transactn 
+                      WHERE DebitGL IS NOT NULL AND DebitGL LIKE @branchCodePattern 
+                      AND MONTH(DateEffective) = MONTH(@fromDate) AND YEAR(DateEffective) = YEAR(@fromDate) 
+                      GROUP BY DebitGL
+                  ) Ba ON LEFT(CoaNbr, 5) = LEFT(openDebit, 5)
+                  LEFT JOIN (
+                      SELECT 
+                          CreditGL AS openCredit, SUM(amount) AS monthlyCredit 
+                      FROM Transactn 
+                      WHERE CreditGL IS NOT NULL AND CreditGL LIKE @branchCodePattern 
+                      AND MONTH(DateEffective) = MONTH(@fromDate) AND YEAR(DateEffective) = YEAR(@fromDate) 
+                      GROUP BY CreditGL
+                  ) Bb ON LEFT(CoaNbr, 5) = LEFT(openCredit, 5)
+                  WHERE CoaType IN ('I', 'E');
+              `;
+              params = [
+                  { name: 'branchCode', type: sql.VarChar, value: branchCode },
+                  { name: 'branchCodePattern', type: sql.VarChar, value: `%${branchCode}` },
+                  { name: 'fromDate', type: sql.DateTime, value: fromDate },
+              ];
+              break;
+
+          case 'New and Closed Clients Detail':
+              query = `
+                  SELECT 
+                      Custno, 
+                      CONCAT(lastname, ' ', middlename, ' ', firstname) AS ClientName,
+                      Gender, Phone, DateCreated, Status, groupname, PrimaryOfficerID
+                  FROM clients c
+                  INNER JOIN Groups g ON g.GroupID = c.GroupID
+                  WHERE 
+                      (DateCreated BETWEEN @fromDate AND @toDate 
+                      OR DateClosed BETWEEN @fromDate AND @toDate)
+                      AND custno LIKE @branchCodePattern
+                  ORDER BY Status, PrimaryOfficerID;
+              `;
+              params = [
+                  { name: 'branchCodePattern', type: sql.VarChar, value: `${branchCode}%` },
+                  { name: 'fromDate', type: sql.DateTime, value: fromDate },
+                  { name: 'toDate', type: sql.DateTime, value: toDate },
+              ];
+              break;
+
+          case 'Income Report':
+              query = `
+                  SELECT 
+                      DateEffective, TranID, stmtref, Amount, COATYPE
+                  FROM transactn T
+                  INNER JOIN GLCOA G ON LEFT(G.COANBR, 5) = LEFT(T.CREDITGL, 5)
+                  WHERE 
+                      TRANID = '020' AND COATYPE = 'I' 
+                      AND valuedate BETWEEN @fromDate AND @toDate
+                      AND LEFT(custno, 3) = @branchCode
+                  ORDER BY valuedate;
+              `;
+              params = [
+                  { name: 'branchCode', type: sql.VarChar, value: branchCode },
+                  { name: 'fromDate', type: sql.DateTime, value: fromDate },
+                  { name: 'toDate', type: sql.DateTime, value: toDate },
+              ];
+              break;
+              case 'Expense Report':
+                query = `
+                    SELECT 
+                          DateEffective,TranID,stmtref,Amount,COATYPE 
+                    FROM 
+                          transactn T   INNER JOIN GLCOA G 
+                    ON  left(G.COANBR,5)=left(T.DEBITGL,5) 
+                    WHERE
+                    TRANID='020' AND COATYPE ='E'  AND valuedate BETWEEN @fromDate  and @toDate and left(custno,3)=@branchCode
+                     ORDER BY valuedate                `;
+                params = [
+                    { name: 'branchCode', type: sql.VarChar, value: branchCode },
+                    { name: 'fromDate', type: sql.DateTime, value: fromDate },
+                    { name: 'toDate', type: sql.DateTime, value: toDate },
+                ];
+                break;
+  
+          default:
+              return res.status(400).send({ message: 'Invalid report type' });
+      }
+
+      // Connect to SQL Server and execute query
+      await checkPoolConnection(); // Ensure the connection is active
+      const pool = await poolPromise;
+      const request = pool.request();
+      params.forEach(param => request.input(param.name, param.type, param.value));
+      const result = await request.query(query);
+
+      res.json(result.recordset);
+  } catch (err) {
+      console.error('Error:', err.message);
+      res.status(500).send({ message: 'An error occurred while generating the report.' });
+  }
+});
+///////////////////////////////////////////////////////
 // POST endpoint for approving transactions
 // app.post('/approvetransaction', async (req, res) => {
 //   const {
@@ -2809,8 +3101,43 @@ app.get('/balances_report', async (req, res) => {
       res.status(500).send('Error fetching balances');
   } 
 });
+////////////////////////////Fetch LOAN OFFICERS/Marketer///////
+// Route to fetch user IDs
+app.post('/loanusers', async (req, res) => {
+  const { branchCode } = req.body;
 
+  if (!branchCode) {
+      return res.status(400).json({ error: 'Branch code is required' });
+  }
 
+  try {
+      // Connect to SQL Server
+      await checkPoolConnection(); // Ensure the connection is active
+      const pool = await poolPromise;
+
+      // Queries
+      const query1 = `SELECT userid FROM usertable WHERE 
+          (userrole='CSO' OR userrole='Marketer' OR userrole='Manager' OR userrole='Branch Manager') 
+          AND branch LIKE '%${branchCode}%'`;
+      const query2 = `SELECT userid FROM usertable WHERE 
+          userrole='MARKETER' AND branch LIKE '%${branchCode}%'`;
+
+      // Execute queries
+      const officersResult = await pool.request().query(query1);
+      const marketersResult = await pool.request().query(query2);
+
+      // Send results
+      res.json({
+          officers: officersResult.recordset.map((row) => row.userid),
+          marketers: marketersResult.recordset.map((row) => row.userid),
+      });
+
+      
+  } catch (error) {
+      console.error('SQL error:', error);
+      res.status(500).json({ error: 'An error occurred while fetching data.' });
+  }
+});
 
 /////////////////////////Overdue Report////////////
 // API to fetch loan overdue report 
