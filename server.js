@@ -355,6 +355,8 @@ app.get('/products', async (req, res) => {
 app.post('/get_staffreport', async (req, res) => {
   try {
      const sesdate=req.body.sesdate.slice(0,10);
+     const branchCode=req.body.branchCode;
+     console.log(branchCode);
     await checkPoolConnection(); // Ensure the connection is active
     const sql = await poolPromise;
     
@@ -362,8 +364,7 @@ app.post('/get_staffreport', async (req, res) => {
     console.log('Connected to the database'); 
 
     // Assuming you generate a report URL based on the transactions
-    const result = await sql.query`
-
+    let staffReportQuery=`
     SELECT 
     one.Branch,
     one.primaryofficerid,
@@ -380,7 +381,7 @@ app.post('/get_staffreport', async (req, res) => {
     ISNULL(NBorrower, 0) AS NBorrower,
     ISNULL(fullpay, 0) AS fullpay,
     CASE WHEN OVAPLusInt > 0 THEN ISNULL(BOD, 0) ELSE 0 END AS BOD,
-    round(Loanbal/BOD *100,2) AS PAR
+    CASE WHEN BOD > 0 THEN round(Loanbal/BOD * 100, 2) ELSE 0 END AS PAR
 FROM 
 (
     SELECT 
@@ -618,11 +619,13 @@ LEFT OUTER JOIN
 
 GROUP BY 
     one.Branch, one.PrimaryOfficerID, OVAprinOnly, disbursement, mobilized, OVAPLusInt, borrower, saver, newclient, closedclient, NBorrower, fullpay,Loanbal,BOD 
-ORDER BY one.PrimaryOfficerID
     `;
     
-    
-    
+    if (branchCode && branchCode !== 'All') {
+      staffReportQuery += ` HAVING Branch=${branchCode}`;
+        }
+  staffReportQuery += ` ORDER BY one.PrimaryOfficerID`;
+  const result = await sql.query(staffReportQuery);
     console.log(result.recordset);
     const data=result.recordset;
 
@@ -1421,31 +1424,40 @@ app.post('/generateIncomeandorexpensenewclientReport', async (req, res) => {
           case 'Income and Expense':
               query = `
                   SELECT 
-                      LEFT(coanbr, 6) + @branchCode AS CoaNbr,
-                      CoaName,
-                      CoaType,
-                      CoaHeader,
-                      COALESCE(ISNULL(monthlyDebit, 0) - ISNULL(monthlyCredit, 0), 0) AS Monthly,
-                      COALESCE(ISNULL(YearlyDebit, 0) - ISNULL(YearlyCredit, 0), 0) AS Yearly
-                  FROM glcoa A
-                  LEFT JOIN (
-                      SELECT 
-                          DebitGL AS openDebit, SUM(amount) AS monthlyDebit 
-                      FROM Transactn 
-                      WHERE DebitGL IS NOT NULL AND DebitGL LIKE @branchCodePattern 
-                      AND MONTH(DateEffective) = MONTH(@fromDate) AND YEAR(DateEffective) = YEAR(@fromDate) 
-                      GROUP BY DebitGL
-                  ) Ba ON LEFT(CoaNbr, 5) = LEFT(openDebit, 5)
-                  LEFT JOIN (
-                      SELECT 
-                          CreditGL AS openCredit, SUM(amount) AS monthlyCredit 
-                      FROM Transactn 
-                      WHERE CreditGL IS NOT NULL AND CreditGL LIKE @branchCodePattern 
-                      AND MONTH(DateEffective) = MONTH(@fromDate) AND YEAR(DateEffective) = YEAR(@fromDate) 
-                      GROUP BY CreditGL
-                  ) Bb ON LEFT(CoaNbr, 5) = LEFT(openCredit, 5)
-                  WHERE CoaType IN ('I', 'E');
-              `;
+    LEFT(A.CoaNbr, 6) + @branchCode AS CoaNbr,
+    A.CoaName,
+    A.CoaType,
+    A.CoaHeader,
+    COALESCE(ISNULL(MonthlyDebit, 0) - ISNULL(MonthlyCredit, 0), 0) AS Monthly,
+    COALESCE(ISNULL(YearlyDebit, 0) - ISNULL(YearlyCredit, 0), 0) AS Yearly
+FROM 
+    glcoa A
+LEFT JOIN (
+    SELECT 
+        DebitGL AS GL,
+        SUM(CASE WHEN MONTH(DateEffective) = MONTH(@fromDate) AND YEAR(DateEffective) = YEAR(@fromDate) THEN Amount ELSE 0 END) AS MonthlyDebit,
+        SUM(CASE WHEN YEAR(DateEffective) = YEAR(@fromDate) THEN Amount ELSE 0 END) AS YearlyDebit
+    FROM 
+        Transactn
+    WHERE 
+        DebitGL IS NOT NULL AND DebitGL LIKE @branchCodePattern 
+    GROUP BY 
+        DebitGL
+) D ON LEFT(A.CoaNbr, 5) = LEFT(D.GL, 5)
+LEFT JOIN (
+    SELECT 
+        CreditGL AS GL,
+        SUM(CASE WHEN MONTH(DateEffective) = MONTH(@fromDate) AND YEAR(DateEffective) = YEAR(@fromDate) THEN Amount ELSE 0 END) AS MonthlyCredit,
+        SUM(CASE WHEN YEAR(DateEffective) = YEAR(@fromDate) THEN Amount ELSE 0 END) AS YearlyCredit
+    FROM 
+        Transactn
+    WHERE 
+        CreditGL IS NOT NULL AND CreditGL LIKE @branchCodePattern 
+    GROUP BY 
+        CreditGL
+) C ON LEFT(A.CoaNbr, 5) = LEFT(C.GL, 5)
+WHERE 
+    A.CoaType IN ('I', 'E')`;
               params = [
                   { name: 'branchCode', type: sql.VarChar, value: branchCode },
                   { name: 'branchCodePattern', type: sql.VarChar, value: `%${branchCode}` },
@@ -2148,7 +2160,11 @@ app.post('/postbulkdeposits', async (req, res) => {
               INSERT INTO pendinggrptrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr, groupid,Grouptrxno)
               VALUES (@AccountID, @tranid, @accountValue, @pettycashgl, @glcode, @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Bulk Withdrawal', @userid, @transactionNbr,@groupid,@grouptrxNbr)
           `;
-     
+         
+    console.log('==================');
+     console.log(accountValue);
+     console.log('==================');
+
           // Prepare and execute the SQL command
           const request = new sql.Request(transaction);
           request.input('AccountID', sql.VarChar(12), AccountID)
