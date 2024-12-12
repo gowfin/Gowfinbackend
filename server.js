@@ -1411,6 +1411,40 @@ app.post("/gl-report", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
+////////////////////////////////Cash book Items Details
+app.post("/cashbookitemdetails", async (req, res) => {
+  
+  const { tranid, startDate, itemQuery} = req.body;
+  console.log({ tranid, startDate, itemQuery});
+
+  if (!tranid || !startDate || !itemQuery) {
+   
+    return res.status(400).json({ error: "All fields are required." });
+  }
+
+
+ 
+
+  try {
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+
+    const result = await pool
+      .request()
+      .input("tranid", sql.VarChar, tranid)
+      .input("startDate", sql.Date, startDate)
+      .query(itemQuery);
+
+   
+    // const openingBalance = openBalanceResult.recordset[0].openningCredit;
+     const openingBalance = result.recordset;
+
+    res.json(openingBalance);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: "Internal server error." });
+  }
+});
 ///////////////////////INCOME OR EXPENSE REPORT/////////////////////
 // API endpoint for reports
 app.post('/generateIncomeandorexpensenewclientReport', async (req, res) => {
@@ -2161,9 +2195,7 @@ app.post('/postbulkdeposits', async (req, res) => {
               VALUES (@AccountID, @tranid, @accountValue, @pettycashgl, @glcode, @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Bulk Withdrawal', @userid, @transactionNbr,@groupid,@grouptrxNbr)
           `;
          
-    console.log('==================');
-     console.log(accountValue);
-     console.log('==================');
+   
 
           // Prepare and execute the SQL command
           const request = new sql.Request(transaction);
@@ -2801,7 +2833,7 @@ console.log(startDate,endDate,code);
 });
 /////////////////////////GL Transactions/////////////////
 app.post('/getglincome', async (req, res) => {
-  const { branch} = req.body;
+  const { branch,glstatement} = req.body;
   const BranchCode="-"+branch.slice(0,3);
   // console.log(BranchCode);
     // Connect to SQL Server
@@ -2809,9 +2841,18 @@ app.post('/getglincome', async (req, res) => {
     const pool = await poolPromise;
     try {
       // Query to fetch incomecode
-      const result = await sql.query(`
+      const result =glstatement? await sql.query(`
         SELECT 
-          replace(coaNbr, '-002', ${BranchCode}) + '-' + coaName AS incomecode
+          replace(coaNbr, '-002', '${BranchCode}') + '-' + coaName AS incomecode
+        FROM 
+          glcoa
+        WHERE 
+          coaheader = '0' 
+          AND len(coanbr) = 9 
+        
+      `):await sql.query(`
+        SELECT 
+          replace(coaNbr, '-002', '${BranchCode}') + '-' + coaName AS incomecode
         FROM 
           glcoa
         WHERE 
@@ -2844,7 +2885,7 @@ app.post('/getglexpense', async (req, res) => {
       // Query to fetch incomecode
       const result = await sql.query(`
         SELECT 
-          replace(coaNbr, '-002', ${BranchCode}) + '-' + coaName AS expensecode
+          replace(coaNbr, '-002', '${BranchCode}') + '-' + coaName AS expensecode
         FROM 
           glcoa
         WHERE 
@@ -2876,7 +2917,7 @@ app.post('/getglbank', async (req, res) => {
       // Query to fetch incomecode
       const result = await sql.query(`
         SELECT 
-          replace(coaNbr, '-002', ${BranchCode}) + '-' + coaName AS bankcode
+          replace(coaNbr, '-002', '${BranchCode}') + '-' + coaName AS bankcode
         FROM 
           glcoa
         WHERE 
@@ -2908,7 +2949,7 @@ app.post('/getglasset', async (req, res) => {
       // Query to fetch incomecode
       const result = await sql.query(`
         SELECT 
-          replace(coaNbr, '-002', ${BranchCode}) + '-' + coaName AS assetcode
+          replace(coaNbr, '-002', '${BranchCode}') + '-' + coaName AS assetcode
         FROM 
           glcoa
         WHERE 
