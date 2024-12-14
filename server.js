@@ -3276,6 +3276,7 @@ app.post('/overduereport', async (req, res) => {
 // Get Daily Cash Book Report
 app.post('/dailycashbook', async (req, res) => {
   const { branchCode, selectedDate } = req.body;
+  
 
   try {
     // Ensure the database connection is active
@@ -3294,7 +3295,7 @@ on CoaNbr=openDebit left outer join
   on CoaNbr=openCredit left outer join  
  (select creditgl,SUM(amount) Credit from Transactn  
  where CreditGL is not null and custno<>'Opening' and  DateEffective=@SelectedDate and YEAR(DateEffective)=YEAR(@SelectedDate) and CreditGL like'1110%' and left(custno,3)=@branchCode group by CreditGL) C    
-ne on  coanbr=C.CreditGL left outer join (select Debitgl,SUM(amount)Debit from Transactn   
+ on  coanbr=C.CreditGL left outer join (select Debitgl,SUM(amount)Debit from Transactn   
  where DebitGL is not null and custno<>'Opening' and DateEffective =@SelectedDate and YEAR(DateEffective)=YEAR(@SelectedDate) and DebitGL like'1110%' and left(custno,3)=@branchCode group by DebitGL) D  
  on  A.coanbr=D.DebitGL
    ` ;
@@ -3307,7 +3308,7 @@ ne on  coanbr=C.CreditGL left outer join (select Debitgl,SUM(amount)Debit from T
      where valuedate=@SelectedDate and custno<>'Opening' and left(custno,3)=@branchCode
      group by TranID,b.productid,CreditGL,DebitGL 
     `;
-
+    
     // Run both queries in parallel to improve efficiency
     const [cashBalanceResult, transactionResult] = await Promise.all([
       pool
