@@ -2997,8 +2997,8 @@ app.post("/journaltransactions", async (req, res) => {
     request.input("Amount", sql.Decimal, amount);
     request.input("DebitGL", sql.VarChar, debitGL);
     request.input("CreditGL", sql.VarChar, creditGL);
-    request.input("ValueDate", sql.DateTime, new Date());
-    request.input("DateEffective", sql.DateTime, new Date());
+    request.input("ValueDate", sql.DateTime, new Date().toISOString().split('T')[0]);
+    request.input("DateEffective", sql.DateTime, new Date().toISOString().split('T')[0]);
     request.input("BranchID", sql.VarChar, comment);
     request.input("StmtRef", sql.VarChar, comment);
     request.input("CreatedBy", sql.VarChar, createdBy);
@@ -3294,7 +3294,7 @@ on CoaNbr=openDebit left outer join
   on CoaNbr=openCredit left outer join  
  (select creditgl,SUM(amount) Credit from Transactn  
  where CreditGL is not null and custno<>'Opening' and  DateEffective=@SelectedDate and YEAR(DateEffective)=YEAR(@SelectedDate) and CreditGL like'1110%' and left(custno,3)=@branchCode group by CreditGL) C    
- on  coanbr=C.CreditGL left outer join (select Debitgl,SUM(amount)Debit from Transactn   
+ne on  coanbr=C.CreditGL left outer join (select Debitgl,SUM(amount)Debit from Transactn   
  where DebitGL is not null and custno<>'Opening' and DateEffective =@SelectedDate and YEAR(DateEffective)=YEAR(@SelectedDate) and DebitGL like'1110%' and left(custno,3)=@branchCode group by DebitGL) D  
  on  A.coanbr=D.DebitGL
    ` ;
