@@ -81,11 +81,11 @@ const checkPoolConnection = async () => {
         }
     }
 };
-app.get('/get_sesdate', async (req, res) => {
-  console.log('Getting Session date:');
-   res.set('Content-Type', 'application/json'); // Set content type
-  return res.send('Here');
-});
+// app.get('/get_sesdate', async (req, res) => {
+//   console.log('Getting Session date:');
+//    res.set('Content-Type', 'application/json'); // Set content type
+//   return res.send('Here');
+// });
 //Endpoint to fetch groups
 app.post('/get_biztype', async (req, res) => {
   try {
@@ -2045,7 +2045,44 @@ console.log({ custno, name, groupID, product });
   }
 });
 ///////////////////////END OF CREATING NEW ACCOUNTS
+///////////////////rejecting Workflow Transactn
+app.post('/rejectpendingtrx', async (req, res) => {
+  try {
+    const { transactionNbr, group } = req.body;
+    // console.log({ transactionNbr, group } );
 
+    if (!transactionNbr) {
+      return res.status(400).send({ message: 'Transaction number is required.' });
+    }
+
+    await checkPoolConnection(); // Ensure the database connection is active
+    const pool = await poolPromise;
+
+    let query = `UPDATE pendingtrx SET tranid = '*' + tranid WHERE transactionNbr = @transactionNbr`;
+
+    if (group) {
+      query = `UPDATE pendingGrptrx SET tranid = '*' + tranid, grouptrxno = '*' + grouptrxno WHERE transactionNbr = @transactionNbr`;
+    }
+
+    // Use the PreparedStatement from the sql object
+    const ps = new sql.PreparedStatement(pool);
+    ps.input('transactionNbr', sql.NVarChar(50));
+
+    await ps.prepare(query);
+
+    const result = await ps.execute({ transactionNbr });
+
+    await ps.unprepare(); // Cleanup prepared statement
+
+    res.send({ message: 'Transaction rejected successfully', result });
+  } catch (error) {
+    console.error('Error updating transaction:', error);
+    res.status(500).send({ message: 'Error processing the request.', error: error.message });
+  }
+});
+
+
+/////////////end of rejecting workflow transactn
 
 
 ///////////////////////////////////Both deposit and repayment bulk posting
@@ -2054,8 +2091,10 @@ app.post('/postbulkdepositsrepayments', async (req, res) => {
   const repayments = req.body.repayToPost; // Get deposits array from request body
   const groupid = req.body.code; // Get groupid  from request body
   const userid = req.body.userid; // Get userid  from request body
-
-  const date = new Date(); // Get current date
+  const sesdate = req.body.sesdate;
+  console.log(`${sesdate}`);
+  const date = new Date(`${sesdate}`); // Get current date
+ 
   const formattedDate = date.toISOString().split('T')[0]; // Format date
  
 
@@ -2159,8 +2198,9 @@ app.post('/postbulkdeposits', async (req, res) => {
   const deposits = req.body.depositToPost; // Get deposits array from request body
   const groupid = req.body.code; // Get groupid  from request body
   const userid = req.body.userid; // Get userid  from request body
+  const sesdate = req.body.sesdate; // Get userid  from request body
   const singletrx= !groupid || groupid==='none'? true:false;
-  const date = new Date(); // Get current date
+  const date = new Date(sesdate); // Get current date
   const formattedDate = date.toISOString().split('T')[0]; // Format date
 
 
@@ -2230,8 +2270,9 @@ app.post('/postrepayments', async (req, res) => {
   const repayments = req.body.repayToPost; // Get repayments array from request body
   const groupid = req.body.code; // Get groupid  from request body
   const userid = req.body.userid; // Get userid  from request body
+  const sesdate = req.body.sesdate; // Get userid  from request body
 const singletrx=!groupid || groupid==='none' ? true: false;
-  const date = new Date(); // Get current date
+  const date = new Date(sesdate); // Get current date
   const formattedDate = date.toISOString().split('T')[0]; // Format date
  
 
@@ -2973,7 +3014,7 @@ app.post('/getglasset', async (req, res) => {
 
 ////////////JOURNAL POSTING
 app.post("/journaltransactions", async (req, res) => {
-  const { amount, debitGL, creditGL, comment, createdBy,branchCode,journalType } = req.body;
+  const { amount, debitGL, creditGL, comment, createdBy,branchCode,journalType,sesdate } = req.body;
 
   if (!amount || !debitGL || !creditGL || !comment || !createdBy) {
     return res.status(400).send("All fields are required.");
@@ -2997,8 +3038,8 @@ app.post("/journaltransactions", async (req, res) => {
     request.input("Amount", sql.Decimal, amount);
     request.input("DebitGL", sql.VarChar, debitGL);
     request.input("CreditGL", sql.VarChar, creditGL);
-    request.input("ValueDate", sql.DateTime, new Date().toISOString().split('T')[0]);
-    request.input("DateEffective", sql.DateTime, new Date().toISOString().split('T')[0]);
+    request.input("ValueDate", sql.DateTime, sesdate);
+    request.input("DateEffective", sql.DateTime,sesdate);
     request.input("BranchID", sql.VarChar, comment);
     request.input("StmtRef", sql.VarChar, comment);
     request.input("CreatedBy", sql.VarChar, createdBy);
