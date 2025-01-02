@@ -1106,7 +1106,7 @@ app.post('/approvetransactionall', async (req, res) => {
     const balance = await getAccountBalance(pool, AccountID,CustNo);
    
   if (TranID === "001") {
-    runningBal = await handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance,TranID,GroupID);
+    runningBal = await handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance,TranID,GroupID,Amount);
   } else if (TranID === "002") {
     runningBal = await handleDepositTransaction(pool, TransactionNbr, AccountID, Amount, balance, TranID,GroupID);
   } else {
@@ -1231,7 +1231,7 @@ app.post('/checklicense', async (req, res) => {
 
   } catch (err) {
       console.error(err);
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message:  err.message.replace('mssql-70716-0.cloudclusters.net:19061','server') });
   }
 });
 ////////////////Group Management///////////////
@@ -1573,49 +1573,7 @@ WHERE
   }
 });
 ///////////////////////////////////////////////////////
-// POST endpoint for approving transactions
-// app.post('/approvetransaction', async (req, res) => {
-//   const {
-//     AccountID,
-//     TranID,
-//     Amount,
-//     TransactionNbr,
-//     CustNo,
-//     BranchID,
-//     GroupID,
-//     IntElement,
-//     PrinElement
-//   } = req.body;
 
-//   let runningBal = 0;
-
-//   try {
-//     await checkPoolConnection(); // Ensure the connection is active
-//     const pool = await poolPromise;
-    
-//     const balance = await getAccountBalance(pool, AccountID,CustNo);
-    
-//     // Validate CustNo to avoid SQL errors
-//     if (!CustNo || typeof CustNo !== 'string' || CustNo.trim().length === 0) {
-//       throw new Error('Invalid CustNo');
-//     }
-// console.log('Check CustNo:',CustNo);
-//     if (TranID === "001") {
-//       runningBal = await handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance,TranID,GroupID);
-//     } else if (TranID === "002") {
- 
-//       runningBal = await handleDepositTransaction(pool, TransactionNbr, AccountID, Amount, balance, TranID,CustNo,GroupID);
-//     } else {
-//       runningBal = await handleOtherTransactionTypes(pool,TransactionNbr, AccountID, Amount, balance,TranID,CustNo,GroupID);
-//     }
-
-//     res.send({ message: 'Transaction posted successfully', runningBal });
-    
-//   } catch (err) {
-//     console.error('SQL error', err);
-//     res.status(500).send({ error: err.message.replace('mssql-70716-0.cloudclusters.net:19061', 'server') });
-//   }
-// });
 app.post('/approvetransaction', async (req, res) => {
   const {
     AccountID,
@@ -1645,7 +1603,7 @@ app.post('/approvetransaction', async (req, res) => {
 
     if (TranID === "001") {
       // Loan transaction
-      runningBal = await handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance, TranID, GroupID);
+      runningBal = await handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance, TranID, GroupID,Amount);
     } else if (TranID === "002") {
       // Deposit transaction
       runningBal = await handleDepositTransaction(pool, TransactionNbr, AccountID, Amount, balance, TranID, CustNo, GroupID);
@@ -1677,11 +1635,38 @@ async function getAccountBalance(pool, AccountID,CustNo) {
 }
 
 // Function to handle loan transactions
-async function handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance,TranID,GroupID) {
+async function handleLoanTransaction(pool, IntElement, PrinElement, TransactionNbr, AccountID, CustNo, balance,TranID,GroupID,Amount) {
   
   let pamount = PrinElement;
   let intamount = IntElement;
+//////HANDLING MOBILE TRANX WITHOUT PRIN & INT
+if(!pamount ||!intamount){
+  // Query for checking transaction amount
+  const query = `
+  IF EXISTS (SELECT amount FROM pendingGrptrx WHERE transactionNbr = @TransactionNbr AND tranid = @TranID)
+  BEGIN
+    SELECT amount FROM pendingGrptrx WHERE transactionNbr = @TransactionNbr AND tranid = @TranID
+  END
+  ELSE
+  BEGIN
+    SELECT 0 AS amount
+  END
+`;
 
+const result = await pool.request()
+  .input('TransactionNbr', sql.VarChar, TransactionNbr)
+  .input('TranID', sql.VarChar, TranID)
+  .query(query);
+
+  // Check for result
+  if (result.recordset.length > 0) {
+    const intamount = parseFloat(result.recordset[0].amount);
+    const initialAmount = parseFloat(Amount); 
+    pamount = (initialAmount - intamount).toFixed(2);
+
+
+      }
+    } //end of Checking for Mobile without int and prin
   const runningBal = (balance + parseFloat(pamount)).toFixed(2);
   const updateLoanBalQuery = `EXEC updateLoanBal @pamount, @AccountID, @CustNo`;
   let singtrx=false;
