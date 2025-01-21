@@ -2562,7 +2562,7 @@ const intRepay = totalInt.dividedBy(disbinstalCount);
 let now = moment(disbursedDate);
 // console.log('disbursedDate:----------------------------------',disbursedDate);
  const schedule=selectedInterestType === "Reducing"? 
- generateReducingBalRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frequency, now, moratorium, clientID, Biweekly, repayGap,includeSaturday,interestRate,noOfMonths)
+ generateReducingBalRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frequency, now, moratorium, clientID, Biweekly, repayGap,includeSaturday,interestRate,noOfMonths,amount)
                          :
  generateRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frequency, now, moratorium, clientID, Biweekly, repayGap,includeSaturday);
  res.json({ schedule });
@@ -2579,195 +2579,195 @@ let now = moment(disbursedDate);
     return totalInt;
 }
 
-function generateRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frqncy, now, moratorium, clientID, Biweekly, repayGap,includeSaturday) {
-    let count = 1;
-    let schedule = [];
-    const holidays=['01-05',
-      '12-06',
-      '01-10',
-      '24-12',
-      '25-12',
-      '31-12',
-      '01-01']
+// function generateRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frqncy, now, moratorium, clientID, Biweekly, repayGap,includeSaturday) {
+//     let count = 1;
+//     let schedule = [];
+//     const holidays=['01-05',
+//       '12-06',
+//       '01-10',
+//       '24-12',
+//       '25-12',
+//       '31-12',
+//       '01-01']
 
 
 
-// Check for moratorium period
-// if (moratorium > 0 || frqncy === "Monthly") {
-  if (frqncy === "Daily") {
-      now.add(moratorium+1, 'days');
-  } else if (frqncy === "Weekly" && !Biweekly) {
-      now.add(moratorium+1, 'weeks');
-  } else if (frqncy === "Monthly") {
-      now.add(moratorium+1, 'months'); //zero moratorium means after 30days(1month) and 1 means 60days(2months)
-  } else if (frqncy === "Weekly" && Biweekly) {
-      now.add(moratorium * 2+2, 'weeks'); // Adjust for bi-weekly
-  }
+// // Check for moratorium period
+// // if (moratorium > 0 || frqncy === "Monthly") {
+//   if (frqncy === "Daily") {
+//       now.add(moratorium+1, 'days');
+//   } else if (frqncy === "Weekly" && !Biweekly) {
+//       now.add(moratorium+1, 'weeks');
+//   } else if (frqncy === "Monthly") {
+//       now.add(moratorium+1, 'months'); //zero moratorium means after 30days(1month) and 1 means 60days(2months)
+//   } else if (frqncy === "Weekly" && Biweekly) {
+//       now.add(moratorium * 2+2, 'weeks'); // Adjust for bi-weekly
+//   }
+// // }
+// while (AmountWithInt.greaterThan(0) && count <= disbinstalCount) {
+//     let validDateFound = false;
+
+//     // Loop to find the next valid date, skipping holidays and weekends if necessary
+//     while (!validDateFound) {
+//         let date = now.format('YYYY-MM-DD');
+//         let dayOfWeek = now.day(); // 0 = Sunday, 6 = Saturday
+//         let formattedHoliday = now.format('DD-MM');
+
+//         // Check if the date is not a holiday and meets the weekend rules
+//         if (
+//             !holidays.includes(formattedHoliday) &&                      // Not a holiday
+//             (includeSaturday || (dayOfWeek !== 0 && dayOfWeek !== 6)) && // Include/exclude Saturdays
+//             (dayOfWeek !== 0)                                            // Exclude Sundays always
+//         ) {
+//             validDateFound = true; // Valid date found, we can add it to the schedule
+//         } else {
+//             now.add(1, 'days'); // Move to the next day if the date is invalid
+//         }
+//     }
+
+//     // Update balance and repayment amounts
+//     let balance = AmountWithInt.toFixed(2);
+//     let repayWithInt = repayment.toFixed(2);
+//     let principalRepay = repayment.minus(intRepay).toFixed(2);
+//     let interest = intRepay.toFixed(2);
+
+//     // Add an installment object to the schedule array
+//     schedule.push({
+//         installment: count,
+//         date: now.format('YYYY-MM-DD'), // Valid date after the loop
+//         balance: balance,
+//         repayWithInt: repayWithInt,
+//         principalRepay: principalRepay,
+//         interest: interest,
+//         status: "Not Serviced",
+//         clientID: clientID
+//     });
+
+//     // Move `now` forward based on the frequency for the next installment
+//     if (frqncy === "Daily") {
+//         now.add(1, 'days');
+//     } else if (frqncy === "Weekly" && !Biweekly) {
+//         now.add(7, 'days');
+//     } else if (frqncy === "Monthly") {
+//       console.log(repayGap);
+//         now.add(repayGap, 'months');
+//     } else if (frqncy === "Weekly" && Biweekly) {
+//         now.add(14, 'days');
+//     }
+
+//     // Update remaining amount and increment installment count
+//     AmountWithInt = AmountWithInt.minus(repayment);
+//     count++;
 // }
-while (AmountWithInt.greaterThan(0) && count <= disbinstalCount) {
-    let validDateFound = false;
-
-    // Loop to find the next valid date, skipping holidays and weekends if necessary
-    while (!validDateFound) {
-        let date = now.format('YYYY-MM-DD');
-        let dayOfWeek = now.day(); // 0 = Sunday, 6 = Saturday
-        let formattedHoliday = now.format('DD-MM');
-
-        // Check if the date is not a holiday and meets the weekend rules
-        if (
-            !holidays.includes(formattedHoliday) &&                      // Not a holiday
-            (includeSaturday || (dayOfWeek !== 0 && dayOfWeek !== 6)) && // Include/exclude Saturdays
-            (dayOfWeek !== 0)                                            // Exclude Sundays always
-        ) {
-            validDateFound = true; // Valid date found, we can add it to the schedule
-        } else {
-            now.add(1, 'days'); // Move to the next day if the date is invalid
-        }
-    }
-
-    // Update balance and repayment amounts
-    let balance = AmountWithInt.toFixed(2);
-    let repayWithInt = repayment.toFixed(2);
-    let principalRepay = repayment.minus(intRepay).toFixed(2);
-    let interest = intRepay.toFixed(2);
-
-    // Add an installment object to the schedule array
-    schedule.push({
-        installment: count,
-        date: now.format('YYYY-MM-DD'), // Valid date after the loop
-        balance: balance,
-        repayWithInt: repayWithInt,
-        principalRepay: principalRepay,
-        interest: interest,
-        status: "Not Serviced",
-        clientID: clientID
-    });
-
-    // Move `now` forward based on the frequency for the next installment
-    if (frqncy === "Daily") {
-        now.add(1, 'days');
-    } else if (frqncy === "Weekly" && !Biweekly) {
-        now.add(7, 'days');
-    } else if (frqncy === "Monthly") {
-      console.log(repayGap);
-        now.add(repayGap, 'months');
-    } else if (frqncy === "Weekly" && Biweekly) {
-        now.add(14, 'days');
-    }
-
-    // Update remaining amount and increment installment count
-    AmountWithInt = AmountWithInt.minus(repayment);
-    count++;
-}
 
 
-// Log the repayment schedule array
-console.log("Repayment Schedule:", schedule);
-    return( schedule );
-}
-/////////////////////REDUCING BAL CALCULATION
-function generateReducingBalRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frqncy, now, moratorium, clientID, Biweekly, repayGap,includeSaturday,interestRate,noOfMonths) {
-  let count = 1;
-  let schedule = [];
-  const holidays=['01-05',
-    '12-06',
-    '01-10',
-    '24-12',
-    '25-12',
-    '31-12',
-    '01-01']
+// // Log the repayment schedule array
+// console.log("Repayment Schedule:", schedule);
+//     return( schedule );
+// }
+// /////////////////////REDUCING BAL CALCULATION
+// function generateReducingBalRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frqncy, now, moratorium, clientID, Biweekly, repayGap,includeSaturday,interestRate,noOfMonths) {
+//   let count = 1;
+//   let schedule = [];
+//   const holidays=['01-05',
+//     '12-06',
+//     '01-10',
+//     '24-12',
+//     '25-12',
+//     '31-12',
+//     '01-01']
 
-    try {
+//     try {
 
-// Initial calculations
-interestRate = (interestRate / 12 * noOfMonths) / disbinstalCount;
-console.log(interestRate);
+// // Initial calculations
+// interestRate = (interestRate / 12 * noOfMonths) / disbinstalCount;
+// console.log(interestRate);
 
-const fixedAmount = amount;
-const fixedPrin = fixedAmount/disbinstalCount;
-console.log(fixedPrin,disbinstalCount);
-let totalInterest = 0;
+// const fixedAmount = amount;
+// const fixedPrin = fixedAmount/disbinstalCount;
+// console.log(fixedPrin,disbinstalCount);
+// let totalInterest = 0;
 
-// Calculate total interest
-let remainingAmount = fixedAmount;
-for (let x = 1; x <= disbinstalCount; x++) {
-    totalInterest = totalInterest+(remainingAmount*(interestRate / 100));
-    remainingAmount = remainingAmount-fixedPrin;
-}
+// // Calculate total interest
+// let remainingAmount = fixedAmount;
+// for (let x = 1; x <= disbinstalCount; x++) {
+//     totalInterest = totalInterest+(remainingAmount*(interestRate / 100));
+//     remainingAmount = remainingAmount-fixedPrin;
+// }
 
-// let repayment = fixedPrin+(fixedAmount*(interestRate / 100));
-let amountWithInterest = amount+totalInterest;
-remainingAmount = fixedAmount; //to continue calculating with the initial disbursement Amount
-if (frqncy === "Daily") {
-  now.add(moratorium+1, 'days');
-} else if (frqncy === "Weekly" && !Biweekly) {
-  now.add(moratorium+1, 'weeks');
-} else if (frqncy === "Monthly") {
-  now.add(moratorium+1, 'months'); //zero moratorium means after 30days(1month) and 1 means 60days(2months)
-} else if (frqncy === "Weekly" && Biweekly) {
-  now.add(moratorium * 2+2, 'weeks'); // Adjust for bi-weekly
-}
-// Populate the loan schedule
-while (amountWithInterest>0 && count <= disbinstalCount) {
-  let validDateFound = false;
+// // let repayment = fixedPrin+(fixedAmount*(interestRate / 100));
+// let amountWithInterest = amount+totalInterest;
+// remainingAmount = fixedAmount; //to continue calculating with the initial disbursement Amount
+// if (frqncy === "Daily") {
+//   now.add(moratorium+1, 'days');
+// } else if (frqncy === "Weekly" && !Biweekly) {
+//   now.add(moratorium+1, 'weeks');
+// } else if (frqncy === "Monthly") {
+//   now.add(moratorium+1, 'months'); //zero moratorium means after 30days(1month) and 1 means 60days(2months)
+// } else if (frqncy === "Weekly" && Biweekly) {
+//   now.add(moratorium * 2+2, 'weeks'); // Adjust for bi-weekly
+// }
+// // Populate the loan schedule
+// while (amountWithInterest>0 && count <= disbinstalCount) {
+//   let validDateFound = false;
     
-    // Adjust date based on frequency and moratorium
-    if (frqncy.toLowerCase() === "daily") {
-        now.add(moratorium + 1, 'days');
-    } else if (frqncy.toLowerCase() === "weekly") {
-      now.add(7, 'days');
-    } else if (frqncy.toLowerCase() === "monthly") {
-      now.add(1, 'month');
-    }
-    else if (frqncy === "Weekly" && Biweekly) {
-      now.add(2, 'weeks'); // Adjust for bi-weekly
-    }
+//     // Adjust date based on frequency and moratorium
+//     if (frqncy.toLowerCase() === "daily") {
+//         now.add(moratorium + 1, 'days');
+//     } else if (frqncy.toLowerCase() === "weekly") {
+//       now.add(7, 'days');
+//     } else if (frqncy.toLowerCase() === "monthly") {
+//       now.add(1, 'month');
+//     }
+//     else if (frqncy === "Weekly" && Biweekly) {
+//       now.add(2, 'weeks'); // Adjust for bi-weekly
+//     }
 
- // Loop to find the next valid date, skipping holidays and weekends if necessary
- while (!validDateFound) {
-  // let date = now.format('YYYY-MM-DD');
-  let dayOfWeek = now.day(); // 0 = Sunday, 6 = Saturday
-  let formattedHoliday = now.format('DD-MM');
+//  // Loop to find the next valid date, skipping holidays and weekends if necessary
+//  while (!validDateFound) {
+//   // let date = now.format('YYYY-MM-DD');
+//   let dayOfWeek = now.day(); // 0 = Sunday, 6 = Saturday
+//   let formattedHoliday = now.format('DD-MM');
 
-  // Check if the date is not a holiday and meets the weekend rules
-  if (
-      !holidays.includes(formattedHoliday) &&                      // Not a holiday
-      (includeSaturday || (dayOfWeek !== 0 && dayOfWeek !== 6)) && // Include/exclude Saturdays
-      (dayOfWeek !== 0)                                            // Exclude Sundays always
-  ) {
-      validDateFound = true; // Valid date found, we can add it to the schedule
-  } else {
-      now.add(1, 'days'); // Move to the next day if the date is invalid
-  }
-}
+//   // Check if the date is not a holiday and meets the weekend rules
+//   if (
+//       !holidays.includes(formattedHoliday) &&                      // Not a holiday
+//       (includeSaturday || (dayOfWeek !== 0 && dayOfWeek !== 6)) && // Include/exclude Saturdays
+//       (dayOfWeek !== 0)                                            // Exclude Sundays always
+//   ) {
+//       validDateFound = true; // Valid date found, we can add it to the schedule
+//   } else {
+//       now.add(1, 'days'); // Move to the next day if the date is invalid
+//   }
+// }
 
 
-    const interestRepayment = remainingAmount*(interestRate / 100);
-    repayment = fixedPrin+interestRepayment;
+//     const interestRepayment = remainingAmount*(interestRate / 100);
+//     repayment = fixedPrin+interestRepayment;
 
-    schedule.push({
-        installment: count,
-        date: now.format('YYYY-MM-DD'),
-        balance: amountWithInterest.toFixed(2),
-        repayWithInt: repayment.toFixed(2),
-        principalRepay: fixedPrin.toFixed(2),
-        interest: interestRepayment.toFixed(2),
-        status: "Not Serviced",
-        clientID: clientID
-    });
+//     schedule.push({
+//         installment: count,
+//         date: now.format('YYYY-MM-DD'),
+//         balance: amountWithInterest.toFixed(2),
+//         repayWithInt: repayment.toFixed(2),
+//         principalRepay: fixedPrin.toFixed(2),
+//         interest: interestRepayment.toFixed(2),
+//         status: "Not Serviced",
+//         clientID: clientID
+//     });
 
-    amountWithInterest = amountWithInterest-repayment;
-    remainingAmount=remainingAmount-fixedPrin;
-    count++;
-}
+//     amountWithInterest = amountWithInterest-repayment;
+//     remainingAmount=remainingAmount-fixedPrin;
+//     count++;
+// }
 
-console.log("Loan Schedule:", schedule);
-return(schedule);
-} catch (err) {
-console.error("Error:", err);
-}
-}
-//////////////////END REDUCING BAL
+// console.log("Loan Schedule:", schedule);
+// return(schedule);
+// } catch (err) {
+// console.error("Error:", err);
+// }
+// }
+// ////////////////END REDUCING BAL
 });
 /////////SUBMIT DISBURSEMENT//////////////////
 app.post('/disburseLoan', async (req, res) => {
@@ -3445,8 +3445,524 @@ app.post('/trialbalance', async (req, res) => {
       console.error(err);
       res.status(500).json({ error: 'Error executing query' });
   } 
+});/////////////////////////////////////////////LOAN DISBURSEMENT APPROVAL////////
+// GET /api/pendingloans
+app.get("/getpendingloans", async (req, res) => {
+  try {
+    await checkPoolConnection(); // Ensure the connection is active
+      const pool = await poolPromise;
+    // const pool = await sql.connect(dbConfig);
+    const result = await pool
+      .request()
+      .query(
+        `	 select custno,loanid,accountname,loanproduct,CONVERT(VARCHAR, disburseddate, 103) AS disburseddate,CONVERT(DECIMAL(10,2), outstandingBal) AS amount,groupid,instalment,InterestPercent,term,GLCode,moratorium,InterestRate,paymentfrequency,monthduration,bvn from loans l 
+ inner join product p on p.ProductID=loanproduct where status='pending'  and accountname not like'**%'
+                union  
+ select custno,loanid,accountname,loanproduct,CONVERT(VARCHAR, disburseddate, 103) AS disburseddate,CONVERT(DECIMAL(10,2), outstandingBal) AS amount,groupid,instalment,InterestPercent,'' 'term','' 'GLCode','' 'moratorium','' 'InterestRate','' 'paymentfrequency', '' 'monthduration','' 'bvn' from loans 
+ where status='pending' and accountname like'**%' 
+ order by disburseddate `
+      );
+
+    res.json(result.recordset);
+  } catch (error) {
+    console.error("Error fetching loans:", error);
+    res.status(500).send("Error fetching loans");
+  }
 });
+/////ACTIONS///////
+// POST /api/loan-action
+app.post("/actiononpendingloans", async (req, res) => {
+  const { loanId,custno,name,interestPercent,bvn,instalment,disburseddate,amount, userid, branchCode,sesdate,term,GLCode,moratorium,InterestRate,paymentfrequency,monthduration,action } = req.body;
+  console.log('frequency : ',paymentfrequency);
+  if (!loanId || !action || !custno) {
+    return res.status(400).send("Loan ID and action are required");
+  }
+
+  try {
+
+    await checkPoolConnection(); // Ensure the connection is active
+      const pool = await poolPromise;
+
+    if (action === "approve") {
+      if(name.includes('*')){
+      const transaction = pool.transaction();
+
+      await transaction.begin();
+    
+      // Combined batch query
+      const batchQuery = `
+        UPDATE loans 
+        SET status = 'Active', 
+            Accountname = REPLACE(Accountname, '**', '') 
+        WHERE loanid = @loanId AND custno = @custno;
+    
+        UPDATE loanschedule 
+        SET status = 'Not Serviced' 
+        WHERE loanid = @loanId AND custno = @custno;
+    
+        UPDATE transactn 
+        SET tranid = '010', 
+            creditgl = REPLACE(creditgl, '**', ''), 
+            debitgl = REPLACE(debitgl, '**', '') 
+        WHERE accountid = @loanId 
+          AND custno = @custno 
+          AND tranid = '**010';
+      `;
+    
+      await transaction.request()
+        .input("loanId", sql.VarChar, loanId)
+        .input("custno", sql.VarChar, custno)
+        .query(batchQuery);
+    
+      await transaction.commit();
+      }
+      else{
+        //CALL THE LOAN APPROVAL FUNCTION BELOW
+        await processLoanApproval(loanId,custno,interestPercent,bvn,instalment,disburseddate,Math.abs(amount),userid, branchCode,sesdate,term,GLCode,moratorium,InterestRate,paymentfrequency,monthduration,pool);
+      }
+      res.send({ message: "Loan approved successfully" });
+    } else if (action === "reject") {
+      if(name.includes('*')){
+        // Delete loan, schedule, and transactions for loans with `*` in name
+        const deleteQueries = `
+          DELETE FROM loans WHERE loanid = @loanId AND custno = @custno;
+          DELETE FROM loanschedule WHERE loanid = @loanId AND custno = @custno;
+          DELETE FROM transactn WHERE accountid = @loanId AND custno = @custno AND tranid = '**010';
+        `;
+        await pool
+          .request()
+          .input("loanId", sql.VarChar, loanId)
+          .input("custno", sql.VarChar, custno)
+          .query(deleteQueries);
+
+      }else{        
+      await pool
+        .request()
+        .input("loanId", sql.VarChar, loanId)
+        .input("custno", sql.VarChar, custno)
+        .query(
+          `DELETE FROM loans 
+           WHERE loanid = @loanId AND custno = @custno`
+        
+        );
+      res.send({ message: "Loan rejected successfully" });
+       }
+    } else {
+      res.status(400).send("Invalid action");
+    }
+  } catch (error) {
+    console.error("Error processing loan:", error);
+    res.status(500).send("Error processing loan");
+  }
+});
+
 ///////////////////////////////////////End of trial Balance report////////////////
+/////////////////////////////LOAN APPROVAL FUNCTION///////////////////////////////
+const BigDecimal = require("big.js");
+
+// const { format, addDays, addMonths, isSaturday, isSunday } = require("date-fns");
+const { v4: uuidv4 } = require("uuid");
+
+async function processLoanApproval(
+    loanId, custno, interestPercent, bvn, instalment, disburseddate, amount, userid, branchCode, sesdate, term, GLCode, moratorium, InterestRate, paymentfrequency, monthduration, pool
+) {
+    const moment = require('moment');
+    const transaction = new sql.Transaction(pool);
+    
+
+    try {
+        // Start transaction
+        await transaction.begin();
+
+        // Extract and prepare data
+        const loanNum = loanId;
+        const disbDate = disburseddate;
+        const glCode = `${GLCode}-${branchCode}`;
+        const numMonths = monthduration;
+        let instalCount = term - moratorium;
+        const IntTypeRatio = InterestRate;
+        const frequency=paymentfrequency;
+        const adjInstalcount=instalment;
+        let repayGap=1;
+
+        // Custom Adjust product settings handling
+       
+        if (bvn.toLowerCase() !== "none") {
+          const [customInstalCount,noOfMonths] = bvn.split(",").map(Number);
+          instalCount = customInstalCount;
+          term = instalCount + moratorium;
+           numMonths = noOfMonths;// Adjust to the new term
+        }
+        
+        let nextDate=moment(disbDate) ;
+        let Biweekly=false;
+        if(instalment==="12.0000"){
+          Biweekly=true;
+            instalCount=12;
+      
+       }
+       else if( !adjInstalcount.includes("1") && !adjInstalcount.includes("0")){
+         repayGap=instalCount/(Integer.parseInt(adjInstalcount));
+         instalCount=Integer.parseInt(adjInstalcount);
+        
+         nextDate.add((repayGap), 'months');
+                                                    }
+    
+       
+       else if(frequency==="monthly"){
+        // nextDate=addMonths(nextDate,1) ;
+        nextDate.add(1, 'months');
+                               }
+
+        // Calculate interest and repayment amounts ("1.00"--Reducing and "1.0" ---EWI/EMI)
+        let totalInterest = IntTypeRatio === "1.0" || IntTypeRatio === "1.00" ///FOR REDUCING BAL
+            ? calculateEMIEWIFlatInterest(amount, InterestRate, instalCount)
+            : (amount * InterestRate * numMonths) / (12 * 100);
+        const includeSaturday=bvn==="0.1" ? true: false;
+        const amountWithInterest = new BigDecimal(amount).plus(totalInterest);
+        const repayment = amountWithInterest.div(instalCount).round(2);
+        const intRepay = new BigDecimal(totalInterest).div(instalCount);
+        const intPercent=new BigDecimal(amountWithInterest).div(amount);
+
+        // Insert transaction
+        const tranId = "010";
+        const tranctNo = `${disbDate.slice(2,4)}${disbDate.slice(5,7)}${disbDate.slice(8,10)}${uuidv4().slice(0, 8)}LD`;
+        // const now = new Date(sesdate);
+        const effectiveDate = moment(sesdate).format("YYYY-MM-DD");
+        
+
+        const transactionInsertQuery = 
+      `INSERT INTO transactn (AccountID, tranid, Amount, CreditGL, DebitGL, Runningbal, ValueDate, DateEffective, CustNo, StmtRef, BranchID, transactionNbr, CreatedBy)
+      VALUES (@loanNum, 
+            @tranId,
+            @amount,
+            @creditGL, 
+            @debitGL,
+            @runningBal,
+            @valueDate,
+            @effectiveDate,
+            @custno,
+            @stmtRef,
+            @branchId,
+            @tranctNo,
+            @userid
+)`
+    ;
+
+//     const scheduleInsertQuery =` 
+//       INSERT INTO loanschedule (LoanID, Date, RunningBal, RepayWithInt, PrinRepay, IntRepay, Status, CustNo, count, servicedPrin, servicedInt, Remark)
+//       VALUES (   @loanNum,
+//                  @nextDate, 
+//                  @runningBal,
+//                  @repayment,
+//                  @prinRepay, 
+//                  @intRepay, 
+//                  @status,
+//                  @custno,
+//                  @count,
+//                  @servicedPrin,
+//                  @servicedInt,
+//                  @remark
+// )` ;
+   
+        const transactionRequest = new sql.Request(transaction);
+        await transactionRequest
+            .input("loanNum", sql.VarChar, loanNum)
+            .input("tranId", sql.VarChar, tranId)
+            .input("amount", sql.Decimal, amount)
+            .input("creditGL", sql.VarChar, `11102-${branchCode}`)
+            .input("debitGL", sql.VarChar, glCode)
+            .input("runningBal", sql.Decimal, amount)
+            .input("valueDate", sql.DateTime, `${disbDate.slice(0,10)} 00:00:00`)
+            .input("effectiveDate", sql.DateTime, effectiveDate)
+            .input("custNo", sql.VarChar, custno)
+            .input("stmtRef", sql.VarChar, "Disbursement")
+            .input("branchId", sql.VarChar, branchCode)
+            .input("tranctNo", sql.VarChar, tranctNo)
+            .input("userid", sql.VarChar, userid)
+            .query(transactionInsertQuery);
+
+        // Update loan
+        const loanRequest = new sql.Request(transaction);
+        await loanRequest
+            .input("disbDate", sql.Date, disbDate)
+            .input("repayment", sql.Decimal(18, 2), repayment.toFixed(2))
+            // .input("interestPercent", sql.Decimal(18, 4), interestPercent)
+            .input("outstandingBalance", sql.Decimal(18, 2), `-${amount}`)
+            .input("loanNum", sql.VarChar, loanNum)
+            .input("custNo", sql.VarChar, custno)
+            .input("intPercent", sql.VarChar, intPercent)
+            .query(`
+                UPDATE loans
+                SET Disburseddate = @disbDate,
+                    status = 'Active',
+                    instalment = @repayment,
+                    interestpercent = @intPercent,
+                    outstandingBal = @outstandingBalance
+                WHERE loanID = @loanNum AND CustNo = @custNo;
+            `);
+
+           
+        // Generate repayment schedule
+       const genetatedSchedule = IntTypeRatio === "1.0" || IntTypeRatio === "1.00" || IntTypeRatio === "1" ?
+            generateReducingBalRepaymentSchedule(instalCount, amountWithInterest, repayment, intRepay, frequency, nextDate, moratorium, custno, Biweekly, repayGap,includeSaturday,InterestRate,numMonths,amount) 
+                                :
+            generateRepaymentSchedule(instalCount, amountWithInterest, repayment, intRepay, frequency, nextDate, moratorium, custno, Biweekly, repayGap,includeSaturday) ;
+            
+
+      //  console.log(genetatedSchedule);
+        // Build batch insert query
+    const values = genetatedSchedule.map((item, index) => `
+    (@loanNum, '${moment(item.date).format("YYYY-MM-DD")}', ${item.balance}, 
+    ${item.repayWithInt}, ${item.principalRepay}, ${item.interest}, 
+    '${item.status}', '${item.clientID}', ${item.installment}, 0.00, 0.00, 
+    '${index === 0 ? "P" : "U"}')`).join(',');
+
+  const scheduleInsertQuery = `
+    INSERT INTO loanschedule (
+      LoanID, Date, RunningBal, RepayWithInt, PrinRepay, IntRepay, 
+      Status, CustNo, count, servicedPrin, servicedInt, Remark
+    ) VALUES ${values}`;
+
+  // Execute batch insert
+  const scheduleRequest = new sql.Request(transaction);
+  await scheduleRequest
+    .input("loanNum", sql.VarChar, loanNum)
+    .query(scheduleInsertQuery);
+
+        // Commit transaction
+      await transaction.commit();
+        return "Loan disbursement and schedule created successfully.";
+    } catch (error) {
+        // Rollback transaction on error
+        await transaction.rollback();
+        console.error("Error processing loan approval:", error);
+        throw error;
+    }
+    
+}
+
+function calculateEMIEWIFlatInterest(amount, rate, count) {
+    const fixedPrin = amount / count;
+    let totalInterest = 0;
+    let balance = amount;
+
+    for (let i = 0; i < count; i++) {
+        totalInterest += (balance * rate) / 100;
+        balance -= fixedPrin;
+    }
+
+    return totalInterest;
+}
+//////////////////
+
+function generateRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frqncy, now, moratorium, clientID, Biweekly, repayGap,includeSaturday) {
+  let count = 1;
+  let schedule = [];
+  const holidays=['01-05',
+    '12-06',
+    '01-10',
+    '24-12',
+    '25-12',
+    '31-12',
+    '01-01']
+
+//initialise schedule with zero expected to show disbursement on fieldprint
+schedule.push({
+  installment: 0,
+  date: now.subtract(2, 'days').format('YYYY-MM-DD'), // Valid date after the loop
+  balance: AmountWithInt,
+  repayWithInt: 0,
+  principalRepay: 0,
+  interest: 0,
+  status: "Not Serviced",
+  clientID: clientID
+});
+
+
+
+// Check for moratorium period
+// if (moratorium > 0 || frqncy === "Monthly") {
+if (frqncy === "Daily") {
+    now.add(moratorium+1, 'days');
+} else if (frqncy === "Weekly" && !Biweekly) {
+    now.add(moratorium+1, 'weeks');
+} else if (frqncy === "Monthly") {
+    now.add(moratorium+1, 'months'); //zero moratorium means after 30days(1month) and 1 means 60days(2months)
+} else if (frqncy === "Weekly" && Biweekly) {
+    now.add(moratorium * 2+2, 'weeks'); // Adjust for bi-weekly
+}
+// }
+
+while (AmountWithInt>0 && count <= disbinstalCount) {
+  let validDateFound = false;
+  
+  // Loop to find the next valid date, skipping holidays and weekends if necessary
+  while (!validDateFound) {
+      let date = now.format('YYYY-MM-DD');
+      let dayOfWeek = now.day(); // 0 = Sunday, 6 = Saturday
+      let formattedHoliday = now.format('DD-MM');
+
+      // Check if the date is not a holiday and meets the weekend rules
+      if (
+          !holidays.includes(formattedHoliday) &&                      // Not a holiday
+          (includeSaturday || (dayOfWeek !== 0 && dayOfWeek !== 6)) && // Include/exclude Saturdays
+          (dayOfWeek !== 0)                                            // Exclude Sundays always
+      ) {
+          validDateFound = true; // Valid date found, we can add it to the schedule
+      } else {
+          now.add(1, 'days'); // Move to the next day if the date is invalid
+      }
+  }
+
+  // Update balance and repayment amounts
+  let balance = AmountWithInt.toFixed(2);
+  let repayWithInt = repayment.toFixed(2);
+  let principalRepay = repayment.minus(intRepay).toFixed(2);
+  let interest = intRepay.toFixed(2);
+
+  // Add an installment object to the schedule array
+  schedule.push({
+      installment: count,
+      date: now.format('YYYY-MM-DD'), // Valid date after the loop
+      balance: balance,
+      repayWithInt: repayWithInt,
+      principalRepay: principalRepay,
+      interest: interest,
+      status: "Not Serviced",
+      clientID: clientID
+  });
+
+  // Move `now` forward based on the frequency for the next installment
+  if (frqncy === "Daily") {
+      now.add(1, 'days');
+  } else if (frqncy === "Weekly" && !Biweekly) {
+      now.add(7, 'days');
+  } else if (frqncy === "Monthly") {
+    console.log(repayGap);
+      now.add(repayGap, 'months');
+  } else if (frqncy === "Weekly" && Biweekly) {
+      now.add(14, 'days');
+  }
+
+  // Update remaining amount and increment installment count
+  AmountWithInt = AmountWithInt.minus(repayment);
+  count++;
+}
+
+
+// Log the repayment schedule array
+console.log("Repayment Schedule:", schedule);
+  return( schedule );
+}
+/////////////////////REDUCING BAL CALCULATION
+function generateReducingBalRepaymentSchedule(disbinstalCount, AmountWithInt, repayment, intRepay, frqncy, now, moratorium, clientID, Biweekly, repayGap,includeSaturday,interestRate,noOfMonths,amount) {
+let count = 1;
+let schedule = [];
+const holidays=['01-05',
+  '12-06',
+  '01-10',
+  '24-12',
+  '25-12',
+  '31-12',
+  '01-01']
+console.log('starting Reducing...');
+  try {
+
+// Initial calculations
+interestRate = (interestRate / 12 * noOfMonths) / disbinstalCount;
+console.log(interestRate);
+
+const fixedAmount = amount;
+const fixedPrin = fixedAmount/disbinstalCount;
+console.log(amount,fixedPrin,disbinstalCount);
+let totalInterest = 0;
+
+// Calculate total interest
+let remainingAmount = fixedAmount;
+for (let x = 1; x <= disbinstalCount; x++) {
+  totalInterest = totalInterest+(remainingAmount*(interestRate / 100));
+  remainingAmount = remainingAmount-fixedPrin;
+}
+
+// let repayment = fixedPrin+(fixedAmount*(interestRate / 100));
+let amountWithInterest = amount+totalInterest;
+remainingAmount = fixedAmount; //to continue calculating with the initial disbursement Amount
+if (frqncy === "Daily") {
+now.add(moratorium+1, 'days');
+} else if (frqncy === "Weekly" && !Biweekly) {
+now.add(moratorium+1, 'weeks');
+} else if (frqncy === "Monthly") {
+now.add(moratorium+1, 'months'); //zero moratorium means after 30days(1month) and 1 means 60days(2months)
+} else if (frqncy === "Weekly" && Biweekly) {
+now.add(moratorium * 2+2, 'weeks'); // Adjust for bi-weekly
+}
+// Populate the loan schedule
+while (amountWithInterest>0 && count <= disbinstalCount) {
+let validDateFound = false;
+  
+  // Adjust date based on frequency and moratorium
+  if (frqncy.toLowerCase() === "daily") {
+      now.add(moratorium + 1, 'days');
+  } else if (frqncy.toLowerCase() === "weekly") {
+    now.add(7, 'days');
+  } else if (frqncy.toLowerCase() === "monthly") {
+    now.add(1, 'month');
+  }
+  else if (frqncy === "Weekly" && Biweekly) {
+    now.add(2, 'weeks'); // Adjust for bi-weekly
+  }
+
+// Loop to find the next valid date, skipping holidays and weekends if necessary
+while (!validDateFound) {
+// let date = now.format('YYYY-MM-DD');
+let dayOfWeek = now.day(); // 0 = Sunday, 6 = Saturday
+let formattedHoliday = now.format('DD-MM');
+
+// Check if the date is not a holiday and meets the weekend rules
+if (
+    !holidays.includes(formattedHoliday) &&                      // Not a holiday
+    (includeSaturday || (dayOfWeek !== 0 && dayOfWeek !== 6)) && // Include/exclude Saturdays
+    (dayOfWeek !== 0)                                            // Exclude Sundays always
+) {
+    validDateFound = true; // Valid date found, we can add it to the schedule
+} else {
+    now.add(1, 'days'); // Move to the next day if the date is invalid
+}
+}
+
+
+  const interestRepayment = remainingAmount*(interestRate / 100);
+  repayment = fixedPrin+interestRepayment;
+  console.log('Reducing Loan Schedule...');
+  schedule.push({
+      installment: count,
+      date: now.format('YYYY-MM-DD'),
+      balance: amountWithInterest.toFixed(2),
+      repayWithInt: repayment.toFixed(2),
+      principalRepay: fixedPrin.toFixed(2),
+      interest: interestRepayment.toFixed(2),
+      status: "Not Serviced",
+      clientID: clientID
+  });
+
+  amountWithInterest = amountWithInterest-repayment;
+  remainingAmount=remainingAmount-fixedPrin;
+  count++;
+}
+
+console.log("Loan Schedule:", schedule);
+return(schedule);
+} catch (err) {
+console.error("Error:", err);
+}
+}
+////////////////END REDUCING BAL
+
+
+
+
+///////////////////////END OF LOAN APPROVAL FUNCTION //////////////////////////////
 // Function to send SMS (dummy implementation, replace with actual logic)
 function sendSMS({ branchCode, transactionType, accountID, glno, amount, stmtRef, chequeNbr }) {
   console.log(`Sending SMS for ${transactionType} on account ${accountID}: Amount: ${amount}, GL: ${glno}`);
