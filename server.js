@@ -3958,6 +3958,30 @@ console.error("Error:", err);
 }
 }
 ////////////////END REDUCING BAL
+///////////////////////GET REPAYMENTSCHEDULE/////////////
+// API to get loan schedule
+app.post('/getrepaymentschedule', async (req, res) => {
+  const { loanID, custno } = req.body;
+
+  try {
+    // const pool = await sql.connect(config);
+    await checkPoolConnection(); // Ensure the connection is active
+    const pool = await poolPromise;
+    const result = await pool
+      .request()
+      .input('loanID', sql.VarChar, loanID)
+      .input('custno', sql.VarChar, custno)
+      .query(
+        "SELECT * FROM loanschedule WHERE loanID = @loanID AND custno = @custno AND count <> '0' ORDER BY date;"
+      );
+
+    res.json(result.recordset);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error fetching loan schedule' });
+  }
+});
+
 
 
 
