@@ -1176,64 +1176,6 @@ app.post('/insert_balancediff', async (req, res) => {
 });
 ////////Post Endpoint for checking license
 
-// app.post('/checklicense', async (req, res) => {
-//   try {
-//       await checkPoolConnection(); // Ensure the connection is active
-//       const pool = await poolPromise;
-
-//       const licenseQuery = 'SELECT * FROM license CROSS JOIN company';
-//       const varQuery = 'SELECT TTLS FROM var';
-
-//       // Get current date in 'yyyy-MM-dd' format
-//       const today = moment().format('YYYY-MM-DD');
-
-//       const varResult = await pool.request().query(varQuery);
-//       const TTLS = varResult.recordset[0]?.TTLS;
-
-//       const licenseResult = await pool.request().query(licenseQuery);
-//       if (!licenseResult.recordset.length) {
-//           return res.status(404).json({ message: 'License not found' });
-//       }
-
-//       const license = licenseResult.recordset[0];
-//       const { ExpiryDate, Lastlogin, StartDate, Duration, licenseStatus, DaysUsed, Ses_date } = license;
-
-//       const expDate = moment(ExpiryDate);
-//       const lastLogon = moment(Lastlogin);
-//       const todayDate = moment(today);
-
-//       const diff = expDate.diff(todayDate, 'days'); // Remaining license days
-//       const intervalLogin = todayDate.diff(lastLogon, 'days'); // Interval in days between logins
-
-//       // Ensure ExpiryDate is a string in 'YYYY-MM-DD' format
-//       const formattedExpiryDate = new Date(ExpiryDate).toISOString().split('T')[0];
-
-//       // Construct TTLSDB using slices of the formatted string
-//       const TTLSDB = `+234${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slice(2, 4)}${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slice(8, 10)}${Duration}`;
-      
-//       if (TTLSDB !== TTLS) {
-//           return res.status(400).json({ message: 'Invalid license. Possible tampering detected.' });
-//       }
-
-//       if (diff <= 0) {
-//           await pool.request().query(`UPDATE license SET licensestatus = 'expired'`);
-//           return res.status(400).json({ message: 'License has expired. Please renew.' });
-//       }
-
-//       if (diff > 0 && diff <= 30) {
-//           // Update DaysUsed and last login
-//           await pool.request().query(`UPDATE license SET DaysUsed = DaysUsed + ${intervalLogin}, lastlogin = '${todayDate.format('YYYY-MM-DD')}'`);
-//           return res.status(200).json({ message: `Your license expires in ${diff} day(s).`, sesdate: Ses_date });
-//       }
-
-//       // Default response if no conditions are met
-//       return res.status(200).json({ message: '', sesdate: Ses_date });
-
-//   } catch (err) {
-//       console.error(err);
-//       res.status(500).json({ message:  err.message.replace('mssql-70716-0.cloudclusters.net:19061','server') });
-//   }
-// });
 app.post('/checklicense', async (req, res) => {
   try {
       await checkPoolConnection(); // Ensure the connection is active
