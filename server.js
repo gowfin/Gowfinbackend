@@ -1176,6 +1176,64 @@ app.post('/insert_balancediff', async (req, res) => {
 });
 ////////Post Endpoint for checking license
 
+// app.post('/checklicense', async (req, res) => {
+//   try {
+//       await checkPoolConnection(); // Ensure the connection is active
+//       const pool = await poolPromise;
+
+//       const licenseQuery = 'SELECT * FROM license CROSS JOIN company';
+//       const varQuery = 'SELECT TTLS FROM var';
+
+//       // Get current date in 'yyyy-MM-dd' format
+//       const today = moment().format('YYYY-MM-DD');
+
+//       const varResult = await pool.request().query(varQuery);
+//       const TTLS = varResult.recordset[0]?.TTLS;
+
+//       const licenseResult = await pool.request().query(licenseQuery);
+//       if (!licenseResult.recordset.length) {
+//           return res.status(404).json({ message: 'License not found' });
+//       }
+
+//       const license = licenseResult.recordset[0];
+//       const { ExpiryDate, Lastlogin, StartDate, Duration, licenseStatus, DaysUsed, Ses_date } = license;
+
+//       const expDate = moment(ExpiryDate);
+//       const lastLogon = moment(Lastlogin);
+//       const todayDate = moment(today);
+
+//       const diff = expDate.diff(todayDate, 'days'); // Remaining license days
+//       const intervalLogin = todayDate.diff(lastLogon, 'days'); // Interval in days between logins
+
+//       // Ensure ExpiryDate is a string in 'YYYY-MM-DD' format
+//       const formattedExpiryDate = new Date(ExpiryDate).toISOString().split('T')[0];
+
+//       // Construct TTLSDB using slices of the formatted string
+//       const TTLSDB = `+234${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slice(2, 4)}${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slice(8, 10)}${Duration}`;
+      
+//       if (TTLSDB !== TTLS) {
+//           return res.status(400).json({ message: 'Invalid license. Possible tampering detected.' });
+//       }
+
+//       if (diff <= 0) {
+//           await pool.request().query(`UPDATE license SET licensestatus = 'expired'`);
+//           return res.status(400).json({ message: 'License has expired. Please renew.' });
+//       }
+
+//       if (diff > 0 && diff <= 30) {
+//           // Update DaysUsed and last login
+//           await pool.request().query(`UPDATE license SET DaysUsed = DaysUsed + ${intervalLogin}, lastlogin = '${todayDate.format('YYYY-MM-DD')}'`);
+//           return res.status(200).json({ message: `Your license expires in ${diff} day(s).`, sesdate: Ses_date });
+//       }
+
+//       // Default response if no conditions are met
+//       return res.status(200).json({ message: '', sesdate: Ses_date });
+
+//   } catch (err) {
+//       console.error(err);
+//       res.status(500).json({ message:  err.message.replace('mssql-70716-0.cloudclusters.net:19061','server') });
+//   }
+// });
 app.post('/checklicense', async (req, res) => {
   try {
       await checkPoolConnection(); // Ensure the connection is active
@@ -1184,8 +1242,8 @@ app.post('/checklicense', async (req, res) => {
       const licenseQuery = 'SELECT * FROM license CROSS JOIN company';
       const varQuery = 'SELECT TTLS FROM var';
 
-      // Get current date in 'yyyy-MM-dd' format
-      const today = moment().format('YYYY-MM-DD');
+      // Get the current date as a moment object
+      const todayDate = moment.utc();
 
       const varResult = await pool.request().query(varQuery);
       const TTLS = varResult.recordset[0]?.TTLS;
@@ -1198,17 +1256,15 @@ app.post('/checklicense', async (req, res) => {
       const license = licenseResult.recordset[0];
       const { ExpiryDate, Lastlogin, StartDate, Duration, licenseStatus, DaysUsed, Ses_date } = license;
 
-      const expDate = moment(ExpiryDate);
-      const lastLogon = moment(Lastlogin);
-      const todayDate = moment(today);
+      // Ensure ExpiryDate is correctly parsed
+      const expDate = moment.utc(ExpiryDate); 
+      const lastLogon = moment.utc(Lastlogin); 
 
-      const diff = expDate.diff(todayDate, 'days'); // Remaining license days
-      const intervalLogin = todayDate.diff(lastLogon, 'days'); // Interval in days between logins
+      const diff = expDate.diff(todayDate, 'days'); // Remaining days until expiry
+      const intervalLogin = todayDate.diff(lastLogon, 'days'); // Days since last login
 
-      // Ensure ExpiryDate is a string in 'YYYY-MM-DD' format
-      const formattedExpiryDate = new Date(ExpiryDate).toISOString().split('T')[0];
-
-      // Construct TTLSDB using slices of the formatted string
+      // Construct TTLSDB correctly
+      const formattedExpiryDate = expDate.format('YYYY-MM-DD');
       const TTLSDB = `+234${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slice(2, 4)}${formattedExpiryDate.slice(5, 7)}${formattedExpiryDate.slice(8, 10)}${Duration}`;
       
       if (TTLSDB !== TTLS) {
@@ -1234,6 +1290,7 @@ app.post('/checklicense', async (req, res) => {
       res.status(500).json({ message:  err.message.replace('mssql-70716-0.cloudclusters.net:19061','server') });
   }
 });
+
 ////////////////Group Management///////////////
 // Endpoint to handle group insertion/updating
 app.post('/groupmgt', async (req, res) => {
@@ -3981,6 +4038,180 @@ app.post('/getrepaymentschedule', async (req, res) => {
     res.status(500).json({ error: 'Error fetching loan schedule' });
   }
 });
+//////////////////////END OF REPAYMENT SCHEDULE////////////////////
+// API Route to Handle Transaction Reversal
+// Reversal Endpoint
+app.post('/reverse', async (req, res) => {
+  const { revtransaction, userid, sesdate } = req.body;
+
+  if (!revtransaction || !userid || !sesdate) {
+    return res.status(400).json({ error: 'Missing required fields in the request.' });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    if (revtransaction.tranid === '001') {
+      const result = await pool
+        .request()
+        .input('transactionNbr', sql.VarChar, revtransaction.transactionNbr)
+        .query(`
+          SELECT Amount 
+          FROM transactn 
+          WHERE stmtref LIKE '%Interest on Repayment%' 
+          AND transactionNbr = @transactionNbr
+        `);
+
+      if (!result.recordset.length) {
+        return res.status(404).json({ error: 'No matching interest found.' });
+      }
+
+      const interest = parseFloat(result.recordset[0].Amount);
+      const principal = revtransaction.amount - interest;
+
+      return res.json({
+        success: true,
+        interest,
+        principal,
+        description: `Reversal of ${revtransaction.tranid}`,
+      });
+    }
+
+    return res.json({
+      success: true,
+      description: `Reversal of ${revtransaction.tranid}`,
+    });
+  } catch (error) {
+    console.error('Error during reversal:', error);
+    return res.status(500).json({ error: 'Server error occurred.' });
+  }
+});
+
+// Generic Transaction Handler
+async function handleRevTransaction(pool, type, params) {
+  const transaction = new sql.Transaction(pool);
+
+  try {
+    await transaction.begin();
+
+    const handlers = {
+      repayment: handleRevRepayment,
+      deposit: handleRevDeposit,
+      withdrawal: handleRevWithdrawal,
+      disbursement: handleRevDisbursement,
+    };
+
+    const handler = handlers[type.toLowerCase()];
+    if (!handler) throw new Error('Invalid transaction type.');
+
+    await handler(transaction, params);
+
+    await transaction.commit();
+    return { success: true, message: `${type} reversal completed successfully.` };
+  } catch (error) {
+    await transaction.rollback();
+    throw new Error(`Transaction reversal failed: ${error.message}`);
+  }
+}
+
+// Repayment Handler
+async function handleRevRepayment(transaction, params) {
+  const {
+    accountID,
+    principalAmount,
+    balance,
+    valueDate,
+    reference,
+    customerNo,
+    userId,
+  } = params;
+
+  await transaction
+    .request()
+    .input('PrincipalAmount', sql.Float, principalAmount)
+    .input('LoanID', sql.VarChar, accountID)
+    .query(`UPDATE loans SET OutstandingBal -= @PrincipalAmount WHERE LoanID = @LoanID`);
+
+  await insertRevTransaction(transaction, {
+    AccountID: accountID,
+    tranid: 'R001',
+    Amount: -principalAmount,
+    RunningBal: balance - principalAmount,
+    ValueDate: valueDate,
+    StmtRef: 'Reversal of Repayment',
+    CustNO: customerNo,
+    CreatedBy: userId,
+  });
+}
+
+// Deposit Handler
+async function handleRevDeposit(transaction, params) {
+  const { ID, amount, transactionData } = params;
+
+  await transaction
+    .request()
+    .input('amount', sql.Float, amount)
+    .input('ID', sql.VarChar, ID)
+    .query(`UPDATE Deposit SET RunningBal -= @amount WHERE AccountID = @ID`);
+
+  await insertRevTransaction(transaction, transactionData);
+}
+
+// Withdrawal Handler
+async function handleRevRevWithdrawal(transaction, params) {
+  const { ID, amount, transactionData } = params;
+
+  await transaction
+    .request()
+    .input('amount', sql.Float, amount)
+    .input('ID', sql.VarChar, ID)
+    .query(`UPDATE Deposit SET RunningBal += @amount WHERE AccountID = @ID`);
+
+  await insertRevTransaction(transaction, transactionData);
+}
+
+// Disbursement Handler
+async function handleRevDisbursement(transaction, params) {
+  const { accountId, amount, custNo, reference, valueDate, dateEffective, trxNo, userId } = params;
+
+  await transaction
+    .request()
+    .input('accountId', sql.VarChar, accountId)
+    .query(`UPDATE loans SET status = 'cancel' WHERE loanid = @accountId`);
+
+  await insertRevTransaction(transaction, {
+    AccountID: accountId,
+    tranid: 'R010',
+    Amount: -amount,
+    DebitGL: 'intGL',
+    CreditGL: 'tellerControlGl',
+    RunningBal: amount,
+    ValueDate: valueDate,
+    DateEffective: dateEffective,
+    CustNO: custNo,
+    StmtRef: reference,
+    CreatedBy: userId,
+    transactionNbr: `R${trxNo}`,
+  });
+}
+
+// Insert Transaction Helper
+async function insertRevTransaction(transaction, data) {
+  const query = `
+    INSERT INTO transactn 
+    (AccountID, tranid, Amount, DebitGL, CreditGL, RunningBal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr) 
+    VALUES 
+    (@AccountID, @tranid, @Amount, @DebitGL, @CreditGL, @RunningBal, @ValueDate, @DateEffective, @CustNO, @StmtRef, @BranchID, @ChequeNbr, @CreatedBy, @transactionNbr)
+  `;
+
+  const request = transaction.request();
+
+  Object.entries(data).forEach(([key, value]) => {
+    request.input(key, sql.VarChar, value);
+  });
+
+  await request.query(query);
+}
 
 
 
