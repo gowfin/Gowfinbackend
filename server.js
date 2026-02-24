@@ -2285,11 +2285,11 @@ const singletrx=!groupid || groupid==='none' ? true: false;
         const RunningBal=outstandingbal+ pamount; //needs to be changed to const RunningBal=(outstandingbal-accountAmount) for P+I
         const sqlQuery = `
             INSERT INTO pendingtrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr,intElement,PrinElement)
-            VALUES (@loanID, '001', @accountValue,@glcode, @pettycashgl,  @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Loan Repayment', @userid, @transactionNbr,@intamount,@pamount)
+            VALUES (@loanID, '001', @accountValue,@pettycashgl,@glcode,  @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Loan Repayment', @userid, @transactionNbr,@intamount,@pamount)
         `;
         const sqlQuery2 = `
             INSERT INTO pendingtrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr,intElement,PrinElement)
-            VALUES (@loanID, '011', @intamount,@glcode, @pettycashgl,  @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Int on Repay', @userid, @transactionNbr,@intamount,@pamount)
+            VALUES (@loanID, '011', @intamount,@pettycashgl,@glcode,  @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Int on Repay', @userid, @transactionNbr,@intamount,@pamount)
         `;
    
         // Prepare and execute the SQL command
