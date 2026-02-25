@@ -2072,7 +2072,7 @@ app.post('/rejectpendingtrx', async (req, res) => {
 ///////////////////////////////////Both deposit and repayment bulk posting
 app.post('/postbulkdepositsrepayments', async (req, res) => {
   const deposits = req.body.depositToPost; // Get deposits array from request body
-  const repayments = req.body.repayToPost; // Get deposits array from request body
+  const repayments = req.body.repayToPost; // Get repayments array from request body
   const groupid = req.body.code; // Get groupid  from request body
   const userid = req.body.userid; // Get userid  from request body
   const sesdate = req.body.sesdate;
@@ -2139,7 +2139,7 @@ app.post('/postbulkdepositsrepayments', async (req, res) => {
         const RunningBal=(outstandingbal/interestPercent)+ pamount;
         const sqlQuery = `
             INSERT INTO pendinggrptrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr,groupid, Grouptrxno,intElement,PrinElement)
-            VALUES (@loanID, '001', @accountValue,@glcode, @pettycashgl,  @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Bulk Repayment', @userid, @transactionNbr,@groupid,@grouptrxNbr,@intamount,@pamount)
+            VALUES (@loanID, '001', @accountValue,@pettycashgl, @glcode,@RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Bulk Repayment', @userid, @transactionNbr,@groupid,@grouptrxNbr,@intamount,@pamount)
         `;
         const sqlQuery2 = `
             INSERT INTO pendinggrptrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr,groupid, Grouptrxno,intElement,PrinElement)
