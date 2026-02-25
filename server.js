@@ -2117,7 +2117,7 @@ app.post('/postbulkdepositsrepayments', async (req, res) => {
               .input('glcode', sql.VarChar, glcode)  
               .input('pettycashgl', sql.VarChar, pettycashgl) 
               .input('groupid', sql.VarChar, groupid) 
-              .input('userid', sql.VarChar, userid); // You may want to use a variable here
+              .input('userid', sql.VarChar, userid); 
 
           await request.query(sqlQuery);
       }
@@ -2132,6 +2132,7 @@ app.post('/postbulkdepositsrepayments', async (req, res) => {
         const groupinttrxNbr = `${groupid}${loanID}-int-${formattedDate}`;
         const narration = `Bulk repay by ${name}`;
         const glcode=code.slice(0,6)+custno.slice(0,3);
+		const intglcode=code.slice(6)+'-'+custno.slice(0,3);
         const pettycashgl='11102-'+custno.slice(0,3);
         const accountAmount= parseFloat(accountValue.replace(/,/g, ''));
         const intamount=accountAmount-(accountAmount/interestPercent);
@@ -2143,7 +2144,7 @@ app.post('/postbulkdepositsrepayments', async (req, res) => {
         `;
         const sqlQuery2 = `
             INSERT INTO pendinggrptrx (AccountID, tranid, Amount, DebitGL, CreditGL, Runningbal, ValueDate, DateEffective, CustNO, StmtRef, BranchID, ChequeNbr, CreatedBy, transactionNbr,groupid, Grouptrxno,intElement,PrinElement)
-            VALUES (@loanID, '011', @intamount,@glcode, @pettycashgl,  @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Int on Repay', @userid, @transactionNbr,@groupid,@groupinttrxNbr,@intamount,@pamount)
+            VALUES (@loanID, '011', @intamount,@glcode, @intglcode,  @RunningBal, @formattedDate, @formattedDate, @CustNo, @narration, @name, 'Int on Repay', @userid, @transactionNbr,@groupid,@groupinttrxNbr,@intamount,@pamount)
         `;
    
         // Prepare and execute the SQL command
@@ -2159,6 +2160,7 @@ app.post('/postbulkdepositsrepayments', async (req, res) => {
             .input('grouptrxNbr', sql.VarChar, grouptrxNbr)  
             .input('groupinttrxNbr', sql.VarChar, groupinttrxNbr)
             .input('glcode', sql.VarChar, glcode) 
+			.input('intglcode', sql.VarChar, intglcode) 
             .input('pettycashgl', sql.VarChar, pettycashgl) 
             .input('intamount',  sql.Decimal(18, 2), intamount) 
             .input('pamount', sql.Decimal(18, 2), pamount) 
