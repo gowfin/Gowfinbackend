@@ -350,7 +350,37 @@ app.get('/products', async (req, res) => {
       //await sql.close(); // Close the connection
   }
 });
-
+////////////////////Gowfin Mobile Dashboard endpoints on Phone////////////////
+app.post('/get_total_accounts', async (req, res) => {
+  try {
+    await checkPoolConnection();
+    const pool = await poolPromise;
+    const result = await pool.query('SELECT COUNT(*) as total FROM Deposit WHERE Status != "closed"');
+    res.json({ total: result.recordset[0].total });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post('/get_total_deposits', async (req, res) => {
+  try {
+    await checkPoolConnection();
+    const pool = await poolPromise;
+    const result = await pool.query('SELECT SUM(RunningBal) as total FROM Deposit WHERE Status != "closed"');
+    res.json({ total: result.recordset[0].total || 0 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post('/get_total_loans', async (req, res) => {
+  try {
+    await checkPoolConnection();
+    const pool = await poolPromise;
+    const result = await pool.query('SELECT COUNT(*) as total FROM Loans WHERE Status = "Active"');
+    res.json({ total: result.recordset[0].total });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 /////////////////////////////////////////
 app.post('/get_staffreport', async (req, res) => {
   try {
