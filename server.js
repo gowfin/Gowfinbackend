@@ -28,9 +28,10 @@ app.use(express.json());
 //handle cross-origin resource sharing
 const cors = require('cors');
 app.use(cors(
-  // {
-  // origin: 'http://localhost:3000', 
-// }
+   {
+    origin: ['http://localhost:3000', 'https://gowfin.energysolutions.com.ng','https://cbt.ohafiamicrofinancebankplc.com','https://cbt.blessedwomenprogressiveinitiative.com.ng']
+ 
+ }
 )); // Enable CORS for all routes
 app.use(bodyParser.json({ limit: '100mb' })); // Adjust size if needed
 
