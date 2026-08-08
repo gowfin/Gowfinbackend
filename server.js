@@ -29,7 +29,7 @@ app.use(express.json());
 const cors = require('cors');
 app.use(cors(
    {
-    origin: ['http://localhost:3000', 'https://gowfin.energysolutions.com.ng','https://cbt.ohafiamicrofinancebankplc.com','https://cbt.blessedwomenprogressiveinitiative.com.ng']
+    origin: ['http://localhost:3000', 'https://gowfin.energysolutions.com.ng','https://cbt.ohafiamicrofinancebankplc.com','https://gowfin.ohafiamicrofinancebankplc.com','https://ohafiamicrofinancebankplc.com','https://cbt.blessedwomenprogressiveinitiative.com.ng']
  
  }
 )); // Enable CORS for all routes
